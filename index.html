@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="fr" data-vibe="academic">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Objectif Gymnase — 11e VP Vaud (Plateforme Gratuite PER)</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <!-- ====================================================================
+       TOP HEADER BAR: Vaud Badge, Active Focus Summary, Stats & Settings
+       ==================================================================== -->
+  <header class="vibe-switcher-bar">
+    <div class="vibe-bar-left">
+      <span class="vaud-badge" id="top-vibe-badge">🇨🇭 Canton de Vaud • 11e VP</span>
+      <span class="per-tag" id="version-pill-btn" style="cursor:pointer;" title="Voir le Changelog et le Backlog">
+        v1.1.0 • Gratuit & Open
+      </span>
+      <span id="active-focus-summary" style="font-size: 0.82rem; color: var(--text-secondary); font-weight: 600;">
+        Focus : 6 chapitres PER actifs
+      </span>
+    </div>
+
+    <div class="user-stats-pills">
+      <div class="stat-pill streak" title="Série de jours d'étude consécutifs">
+        🔥 <span id="stat-streak">5 j. série</span>
+      </div>
+      <div class="stat-pill xp" title="Points d'expérience gagnés">
+        ✨ <span id="stat-xp">340 XP</span>
+      </div>
+      <button class="secondary-btn" id="open-settings-btn" style="border-radius: 999px; padding: 6px 14px; font-weight: 700;">
+        ⚙️ Paramètres & Focus
+      </button>
+    </div>
+  </header>
+
+  <!-- ====================================================================
+       MAIN 3-COLUMN WORKSPACE
+       ==================================================================== -->
+  <div class="app-shell">
+
+    <!-- LEFT NAVIGATION: Brand, Subject Switcher & Filtered PER Chapters -->
+    <aside class="left-nav">
+      <div class="brand-header">
+        <div class="brand-logo">VP</div>
+        <div class="brand-title">
+          <h1>Objectif Gymnase</h1>
+          <p>Programme officiel PER • Vaud</p>
+        </div>
+      </div>
+
+      <div class="subject-switcher">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span class="section-label" style="margin-bottom:0;">Branches actives</span>
+          <button id="sidebar-customize-btn" style="font-size:0.72rem; color:var(--accent-primary); font-weight:700;">
+            Modifier ⚙️
+          </button>
+        </div>
+        <div class="subject-tabs" id="subject-tabs-container">
+          <!-- Populated dynamically based on enabled subjects -->
+        </div>
+      </div>
+
+      <div>
+        <span class="section-label">Mes Chapitres Ciblés (PER)</span>
+        <nav class="nav-menu" id="module-nav-list">
+          <!-- Populated dynamically by js/app.js -->
+        </nav>
+      </div>
+
+      <div class="exam-countdown-box">
+        <h4>🎓 Cap sur le Certificat VP</h4>
+        <p id="readiness-pct-label">57% prêt pour le Certificat (340 / 600 XP)</p>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="readiness-bar-fill" style="width: 57%;"></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER STAGE: Hero + Vibe-Specific Views + Interactive Exercise Arena -->
+    <main class="center-stage">
+
+      <!-- Dynamic Hero Banner -->
+      <section class="vibe-hero-banner">
+        <div class="hero-top-row">
+          <div class="hero-greeting">
+            <h2 id="hero-title">Objectif Gymnase — Espace Révision PER</h2>
+            <p id="hero-subtitle">
+              Entraîne-toi gratuitement sur le programme officiel vaudois (PER) avec Aide-Mémoire, répétition espacée et Coach IA.
+            </p>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="secondary-btn" id="hero-settings-btn">
+              🎯 Choisir mes sujets
+            </button>
+            <button class="quick-sprint-btn" id="hero-sprint-btn">
+              ⚡ Sprint Chrono 60s (+35 XP)
+            </button>
+          </div>
+        </div>
+
+        <!-- VIBE 2 EXCLUSIVE: Interactive Vaud Lake Geneva Quest Map -->
+        <div class="vaud-quest-map-container">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span style="font-size:0.78rem; font-weight:700; color:var(--accent-primary);">
+              🚂 CARTE DE PROGRESSION : LIGNE DU LÉMAN (NYON → MONTREUX)
+            </span>
+            <span style="font-size:0.74rem; color:var(--text-secondary);">
+              Débloque chaque gare avec tes XP !
+            </span>
+          </div>
+          <div class="quest-stations-track" id="quest-stations-track">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <!-- VIBE 3 EXCLUSIVE: Minimalist Focus Studio Telemetry -->
+        <div class="studio-metrics-bar">
+          <div class="studio-metric-card">
+            <div class="metric-val" id="studio-accuracy">83%</div>
+            <div class="metric-lbl">Précision PER</div>
+          </div>
+          <div class="studio-metric-card">
+            <div class="metric-val" id="studio-answered">18</div>
+            <div class="metric-lbl">Analyses résolues</div>
+          </div>
+          <div class="studio-metric-card">
+            <div class="metric-val" id="studio-rank">#2 Vaud</div>
+            <div class="metric-lbl">Classement Amis</div>
+          </div>
+          <div class="studio-metric-card">
+            <div class="metric-val">[1-4]</div>
+            <div class="metric-lbl">Raccourcis Clavier</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- INTERACTIVE EXERCISE ARENA -->
+      <section class="arena-card" id="arena-section">
+        <div class="arena-header">
+          <div>
+            <h3 id="arena-module-title" style="font-size: 1.12rem; font-weight: 800;">
+              🧩 Propositions Subordonnées
+            </h3>
+            <span class="per-tag" id="arena-per-ref">PER L1 36 — La phrase complexe</span>
+          </div>
+
+          <div class="mode-pills">
+            <button class="mode-pill" id="toggle-theory-btn" title="Ouvrir la fiche de théorie officielle PER">
+              📖 Aide-Mémoire PER
+            </button>
+            <button class="mode-pill active" data-mode="all">🎯 Exercices</button>
+            <button class="mode-pill" data-mode="surgery">✂️ Chirurgie</button>
+            <button class="mode-pill" data-mode="mistakes" id="mistakes-mode-pill">🔁 Mes erreurs (0)</button>
+            <button class="mode-pill" data-mode="sprint">⏱️ Sprint 60s</button>
+            <span class="stat-pill" id="sprint-timer-badge" style="display:none; color:var(--accent-danger);">⏱️ 60s</span>
+          </div>
+        </div>
+
+        <!-- OFFICIAL PER THEORY SHEET DRAWER (Khan Academy / Aide-Mémoire Pattern) -->
+        <div class="theory-sheet-drawer" id="theory-sheet-drawer">
+          <h4>
+            <span id="theory-sheet-title">📖 Aide-Mémoire Officiel PER</span>
+            <button id="close-theory-btn" style="font-size:0.78rem; color:var(--text-secondary);">Fermer ✕</button>
+          </h4>
+          <ul class="theory-points-list" id="theory-points-list">
+            <!-- Populated dynamically -->
+          </ul>
+        </div>
+
+        <div class="question-meta-bar">
+          <span id="question-counter">Question 1 sur 5</span>
+          <span>Terminologie officielle Canton de Vaud (DGEO / PER)</span>
+        </div>
+
+        <div class="question-prompt" id="question-prompt">
+          Chargement de la question...
+        </div>
+
+        <!-- Standard Sentence Showcase -->
+        <div class="sentence-showcase" id="sentence-showcase"></div>
+
+        <!-- Phrase Surgery Interactive Tokens -->
+        <div class="surgery-segments" id="surgery-container" style="display: none;"></div>
+
+        <!-- Multiple Choice Options -->
+        <div class="options-grid" id="options-container"></div>
+
+        <!-- Instant PER Feedback Banner -->
+        <div class="feedback-banner" id="feedback-banner">
+          <div class="feedback-header">
+            <span id="feedback-title">✅ Excellent !</span>
+          </div>
+          <p id="feedback-rule" style="font-size: 0.88rem; color: var(--text-secondary);"></p>
+        </div>
+
+        <div class="arena-actions">
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="secondary-btn" id="explain-ai-btn">
+              🤖 Astuce Coach IA
+            </button>
+            <button class="secondary-btn" id="generate-infinite-btn" title="Génère dynamiquement un nouvel exercice conforme au PER Vaud">
+              ✨ Générer un nouvel exercice (Infini)
+            </button>
+          </div>
+          <button class="quick-sprint-btn" id="next-question-btn">
+            Question suivante →
+          </button>
+        </div>
+      </section>
+
+      <!-- OVERVIEW OF FOCUS MODULES -->
+      <section>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h3 style="font-size: 1.05rem; font-weight: 800;">📚 Mes modules d’entraînement actifs (PER 11e VP)</h3>
+          <button class="secondary-btn" id="filter-topics-btn" style="padding: 5px 10px; font-size: 0.76rem;">
+            ⚙️ Filtrer les sujets
+          </button>
+        </div>
+        <div class="modules-grid" id="modules-overview-grid">
+          <!-- Populated dynamically -->
+        </div>
+      </section>
+
+    </main>
+
+    <!-- RIGHT RAIL: Free AI Study Coach + Social Leaderboard & Family Sharing -->
+    <aside class="right-rail">
+
+      <!-- FREE AI COACH CARD -->
+      <div class="rail-card">
+        <div class="rail-card-header">
+          <h3>🤖 Ton Coach IA 11e VP <span class="per-tag">Gratuit</span></h3>
+          <button class="secondary-btn" id="config-api-key-btn" style="padding: 4px 8px; font-size: 0.72rem;" title="Configurer une clé Gemini gratuite (optionnel)">
+            ⚙️ API
+          </button>
+        </div>
+
+        <div class="ai-chat-history" id="ai-chat-history">
+          <div class="ai-msg bot">
+            Salut ! 👋 Je suis ton <strong>Coach 11e VP Vaud</strong>. Pose-moi une question sur les <em>subordonnées</em>, les <em>fonctions PER (CP, CDV)</em>, le <em>discours indirect</em>, ou colle un paragraphe de ton <strong>texte argumentatif</strong> !
+          </div>
+        </div>
+
+        <div class="ai-quick-chips">
+          <button class="ai-chip" data-prompt="Quelle est la différence entre subordonnée relative et complétive ?">
+            Relative vs Complétive ?
+          </button>
+          <button class="ai-chip" data-prompt="Explique-moi le Complément de phrase (CP) dans le PER Vaud.">
+            C’est quoi un CP ?
+          </button>
+          <button class="ai-chip" data-prompt="Comment structurer une introduction de texte argumentatif au Certificat ?">
+            Intro Argumentative
+          </button>
+        </div>
+
+        <div class="ai-input-row">
+          <input
+            type="text"
+            id="ai-user-input"
+            placeholder="Pose un doute ou colle ton texte..."
+            aria-label="Message au Coach IA"
+          />
+          <button class="ai-send-btn" id="ai-send-btn">Envoyer</button>
+        </div>
+      </div>
+
+      <!-- SOCIAL COMPETITION & FAMILY SHARE CARD -->
+      <div class="rail-card">
+        <div class="rail-card-header">
+          <h3>🏆 Classement entre Amis (Vaud)</h3>
+          <span class="per-tag">Semaine 45</span>
+        </div>
+
+        <div class="leaderboard-list" id="leaderboard-list">
+          <!-- Populated dynamically -->
+        </div>
+
+        <div class="share-buttons-stack">
+          <button class="secondary-btn" id="open-duel-modal-btn" style="justify-content:center;">
+            ⚔️ Défier un ami
+          </button>
+          <button class="secondary-btn" id="open-family-modal-btn" style="justify-content:center;">
+            👨‍👩‍👧‍👦 Bilan Famille
+          </button>
+        </div>
+      </div>
+
+    </aside>
+  </div>
+
+  <!-- ====================================================================
+       FOOTER: VERSION, OPEN SOURCE MISSION & BACKLOG LINK
+       ==================================================================== -->
+  <footer class="app-footer">
+    <div>
+      <strong>Objectif Gymnase — 11e VP Vaud (v1.1.0)</strong> • Plateforme d’étude 100% gratuite alignée sur le Plan d’études romand (PER).
+    </div>
+    <div style="display:flex; gap:12px;">
+      <button id="footer-roadmap-btn" style="color:var(--accent-primary); font-weight:700;">
+        📋 Voir le Backlog & Versions (v1.1.0)
+      </button>
+    </div>
+  </footer>
+
+  <!-- ====================================================================
+       UNIFIED MODAL: SETTINGS + ROADMAP/BACKLOG + DUEL + FAMILY
+       ==================================================================== -->
+  <div class="modal-backdrop" id="social-modal-backdrop">
+    <div class="modal-card" id="social-modal-content">
+      <!-- Populated dynamically -->
+    </div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/ai-coach.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

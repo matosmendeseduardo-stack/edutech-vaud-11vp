@@ -1,0 +1,19 @@
+{
+  "name": "objectif-gymnase-vaud-11vp",
+  "version": "1.0.0",
+  "description": "Interactive PER-aligned study platform for 11e VP students in Canton of Vaud (Français & Allemand)",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "dev": "npx vite"
+  },
+  "keywords": [
+    "vaud",
+    "11vp",
+    "per",
+    "francais",
+    "allemand",
+    "suisse",
+    "education"
+  ]
+}
