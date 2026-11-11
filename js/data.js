@@ -1,13 +1,13 @@
 /* ==========================================================================
    Vaud 11e VP Curriculum Database (Aligned with PER & DGEO Vaud)
-   Version: 1.1.0
+   Version: 1.2.1
    Includes:
    - 6 Complete Français 11e VP Chapters + Official PER Theory Sheets
    - Allemand 11e VP Option/Placeholder
    - Procedural PER Exercise Generator (Infinite Combinatorial Engine)
    ========================================================================== */
 
-window.APP_VERSION = 'v1.1.0';
+window.APP_VERSION = 'v1.3.0';
 
 window.VAUD_QUEST_STATIONS = [
   { id: 'nyon', city: 'Nyon', topic: 'Fonctions PER', xpRequired: 0 },
@@ -402,6 +402,66 @@ window.CURRICULUM_DATA = {
             perRule: '« Néanmoins », « toutefois », « cependant » et « en revanche » sont des connecteurs logiques d’opposition idéaux pour passer de la concession à votre thèse.'
           }
         ]
+      },
+      {
+        id: 'orthographe',
+        title: '7. Orthographe & Accord du Participe Passé (Être, Avoir, Pronominaux)',
+        perRef: 'PER L1 37 — Orthographe grammaticale',
+        icon: '✒️',
+        station: 'Montreux (Certificat)',
+        description: 'Maîtriser l’accord du participe passé avec être, avoir (CDV antéposé) et les verbes pronominaux pour éviter toute perte de points à l’écrit.',
+        mastery: 66,
+        theorySheet: {
+          title: 'Aide-Mémoire PER : Les 3 règles d’or du Participe Passé',
+          points: [
+            '<strong>1. Auxiliaire ÊTRE</strong> : Le participe passé s’accorde toujours en genre et en nombre avec le <strong>sujet</strong> (ex: <em>Elles sont parties</em>).',
+            '<strong>2. Auxiliaire AVOIR</strong> : Il ne s’accorde JAMAIS avec le sujet. Il s’accorde uniquement avec le <strong>Complément direct du verbe (CDV)</strong> si celui-ci est placé <strong>AVANT</strong> le verbe (ex: <em>Les lettres qu’il a écrites</em>). Avec « en », il reste invariable.',
+            '<strong>3. Verbes pronominaux</strong> : S’accordent avec le sujet si le verbe est essentiellement pronominal (<em>Elles se sont enfuies</em>), ou avec le CDV placé avant (<em>Elles se sont lavées</em> vs <em>Elles se sont lavé les mains</em> ; et <em>Elles se sont téléphoné</em> = CIV → invariable !).'
+          ]
+        },
+        questions: [
+          {
+            id: 'orth-1',
+            type: 'mcq',
+            prompt: 'Choisissez la forme correctement accordée du participe passé :',
+            sentence: 'Les nouvelles que nous avons <mark>...</mark> hier soir nous ont rassurés.',
+            options: [
+              'reçu (invariable)',
+              'reçus (masculin pluriel)',
+              'reçues (féminin pluriel)',
+              'reçue (féminin singulier)'
+            ],
+            correctIndex: 2,
+            perRule: 'Avec l’auxiliaire « avoir », le participe passé s’accorde avec le CDV s’il est placé avant le verbe. Ici, le CDV est le pronom relatif « que », qui a pour antécédent « Les nouvelles » (féminin pluriel) → « reçues ».'
+          },
+          {
+            id: 'orth-2',
+            type: 'mcq',
+            prompt: 'Pourquoi le participe passé est-il invariable dans cette phrase ?',
+            sentence: 'Les deux amies se sont <mark>succédé</mark> à la tribune.',
+            options: [
+              'Parce que le sujet est au pluriel',
+              'Parce que « se » est un Complément indirect du verbe (CIV : succéder À quelqu’un)',
+              'Parce que le verbe est au présent',
+              'Parce que l’auxiliaire est avoir'
+            ],
+            correctIndex: 1,
+            perRule: 'Classique du Certificat vaudois ! On dit « succéder À quelqu’un » (comme « se téléphoner », « se sourire », « se plaire »). Le pronom « se » est donc un CIV et non un CDV : le participe passé reste strictement invariable !'
+          },
+          {
+            id: 'orth-3',
+            type: 'surgery',
+            prompt: 'CHIRURGIE ORTHOGRAPHIQUE : Cliquez sur le segment qui contient une faute d’accord du participe passé :',
+            tokens: [
+              'Après la randonnée,',
+              'les élèves',
+              'se sont lavés les mains',
+              'à la fontaine du village.'
+            ],
+            correctTokenIndex: 2,
+            perRule: 'Il faut écrire « se sont lavé les mains » (sans -s) ! En effet, le CDV (« les mains ») est placé APRÈS le verbe, et « se » est un CIV (laver les mains À soi-même).'
+          }
+        ]
       }
     ]
   },
@@ -666,6 +726,43 @@ window.PERExerciseGenerator = {
         type: 'mcq',
         isGenerated: true,
         prompt: '⚡ [Exercice Généré] Quelle est la valeur exacte du temps employé ?',
+        sentence: pick.sentence,
+        options: shuffled,
+        correctIndex: shuffled.indexOf(pick.answer),
+        perRule: pick.rule
+      };
+    }
+
+    if (moduleId === 'orthographe') {
+      const items = [
+        {
+          sentence: 'Les pommes du Valais que j’ai <mark>...</mark> au marché sont délicieuses.',
+          answer: 'achetées (féminin pluriel — CDV « que » placé avant)',
+          others: [
+            'acheté (invariable)',
+            'achetés (masculin pluriel)',
+            'achetée (féminin singulier)'
+          ],
+          rule: 'Avec l’auxiliaire « avoir », le participe passé s’accorde avec le CDV placé avant le verbe : ici le pronom relatif « que » reprend « Les pommes » (féminin pluriel) → « achetées ».'
+        },
+        {
+          sentence: 'Ces deux gymnasiens se sont <mark>...</mark> pendant toute la récréation.',
+          answer: 'parlé (invariable — parler À quelqu’un = CIV)',
+          others: [
+            'parlés (masculin pluriel)',
+            'parlées (féminin pluriel)',
+            'parler (infinitif)'
+          ],
+          rule: 'On dit « parler À quelqu’un » : le pronom réfléchi « se » occupe la fonction de Complément indirect du verbe (CIV). Le participe passé reste donc invariable (« parlé ») !'
+        }
+      ];
+      const pick = items[Math.floor(Math.random() * items.length)];
+      const shuffled = [pick.answer, ...pick.others].sort(() => Math.random() - 0.5);
+      return {
+        id,
+        type: 'mcq',
+        isGenerated: true,
+        prompt: '⚡ [Exercice Généré] Choisissez l’accord exact du participe passé selon le PER :',
         sentence: pick.sentence,
         options: shuffled,
         correctIndex: shuffled.indexOf(pick.answer),

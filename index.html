@@ -3,318 +3,560 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Objectif Gymnase — 11e VP Vaud (Plateforme Gratuite PER)</title>
+  <title>Objectif Gymnase — 11e VP Vaud (Plateforme Gratuite PER v1.3.0)</title>
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
 
   <!-- ====================================================================
-       TOP HEADER BAR: Vaud Badge, Active Focus Summary, Stats & Settings
+       CLEAN TOP NAVIGATION BAR: Brand, 4 Focused Tabs, Streak, XP & Auth Pill
        ==================================================================== -->
-  <header class="vibe-switcher-bar">
-    <div class="vibe-bar-left">
-      <span class="vaud-badge" id="top-vibe-badge">🇨🇭 Canton de Vaud • 11e VP</span>
-      <span class="per-tag" id="version-pill-btn" style="cursor:pointer;" title="Voir le Changelog et le Backlog">
-        v1.1.0 • Gratuit & Open
-      </span>
-      <span id="active-focus-summary" style="font-size: 0.82rem; color: var(--text-secondary); font-weight: 600;">
-        Focus : 6 chapitres PER actifs
-      </span>
-    </div>
-
-    <div class="user-stats-pills">
-      <div class="stat-pill streak" title="Série de jours d'étude consécutifs">
-        🔥 <span id="stat-streak">5 j. série</span>
-      </div>
-      <div class="stat-pill xp" title="Points d'expérience gagnés">
-        ✨ <span id="stat-xp">340 XP</span>
-      </div>
-      <button class="secondary-btn" id="open-settings-btn" style="border-radius: 999px; padding: 6px 14px; font-weight: 700;">
-        ⚙️ Paramètres & Focus
+  <header class="top-navbar">
+    <div class="top-navbar-inner">
+      <!-- Brand Identity (Clicks back to Parcours) -->
+      <button class="brand-trigger" id="brand-home-btn" title="Retour à Mon Parcours">
+        <div class="brand-logo">VP</div>
+        <div class="brand-text">
+          <span class="brand-name">Objectif Gymnase</span>
+          <span class="brand-meta" id="top-vibe-badge">🇨🇭 11e VP Vaud • PER</span>
+        </div>
       </button>
+
+      <!-- 4-Tab Segmented Navigation (Progressive Disclosure) -->
+      <nav class="main-tabs" role="tablist" aria-label="Navigation principale">
+        <button class="main-tab active" data-view="parcours" role="tab" aria-selected="true">
+          <span>📚</span>
+          <span>Parcours</span>
+        </button>
+        <button class="main-tab" data-view="entrainement" role="tab" aria-selected="false">
+          <span>🎯</span>
+          <span>Entraînement</span>
+        </button>
+        <button class="main-tab" data-view="defis" role="tab" aria-selected="false">
+          <span>🏆</span>
+          <span>Défis &amp; Famille</span>
+        </button>
+        <button class="main-tab" data-view="parametres" role="tab" aria-selected="false">
+          <span>⚙️</span>
+          <span>Paramètres</span>
+        </button>
+      </nav>
+
+      <!-- Student Streak, XP & Account Auth Pill -->
+      <div class="user-stats-pills top-stats-right">
+        <div class="stat-pill streak" title="Série de jours d'étude consécutifs">
+          🔥 <span id="stat-streak">5 j.</span>
+        </div>
+        <div class="stat-pill xp" title="Points d'expérience gagnés">
+          ✨ <span id="stat-xp">340 XP</span>
+        </div>
+        <button class="auth-profile-pill" id="user-auth-pill" title="Ouvrir Connexion & Profil Élève 11e VP">
+          👤 <span id="user-auth-label">Connexion / Profil</span>
+        </button>
+      </div>
     </div>
   </header>
 
   <!-- ====================================================================
-       MAIN 3-COLUMN WORKSPACE
+       2-COLUMN WORKSPACE: MAIN VIEW CONTAINER + STICKY AI COACH PANEL
        ==================================================================== -->
-  <div class="app-shell">
+  <div class="workspace-layout">
 
-    <!-- LEFT NAVIGATION: Brand, Subject Switcher & Filtered PER Chapters -->
-    <aside class="left-nav">
-      <div class="brand-header">
-        <div class="brand-logo">VP</div>
-        <div class="brand-title">
-          <h1>Objectif Gymnase</h1>
-          <p>Programme officiel PER • Vaud</p>
+    <!-- LEFT / MAIN COLUMN: 4 Progressive-Disclosure Views -->
+    <main class="single-focus-shell">
+
+      <!-- ================================================================
+           VIEW 1: 📚 PARCOURS (Default Home View — Readiness & Chapters)
+           ================================================================ -->
+      <section class="app-view active" id="view-parcours" data-view-panel="parcours">
+
+        <!-- Welcoming Readiness & Continue Card -->
+        <div class="parcours-hero-card">
+          <div class="parcours-hero-top">
+            <div>
+              <div class="subject-pills-row" id="subject-tabs-container">
+                <!-- Populated dynamically: 📘 Français 11e VP | 🇩🇪 Allemand (if enabled) -->
+              </div>
+              <h1 id="hero-title">Prêt pour ta session 11e VP ?</h1>
+              <p id="hero-subtitle">
+                Révise étape par étape les 7 chapitres officiels vaudois (PER) à ton rythme, avec ton Coach IA toujours à côté.
+              </p>
+            </div>
+
+            <div class="parcours-hero-cta">
+              <button class="primary-cta-btn" id="continue-study-btn">
+                Continuer l’entraînement →
+              </button>
+              <button class="secondary-btn" id="hero-sprint-btn" title="Lancer 60 secondes de questions rapides">
+                ⚡ Sprint 60s
+              </button>
+            </div>
+          </div>
+
+          <!-- Certificat Readiness Bar -->
+          <div class="readiness-strip">
+            <div class="readiness-labels">
+              <span class="readiness-title">🎓 Objectif Certificat 11e VP</span>
+              <span class="readiness-value" id="readiness-pct-label">57% prêt (340 / 600 XP)</span>
+            </div>
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" id="readiness-bar-fill" style="width: 57%;"></div>
+            </div>
+            <div class="readiness-submeta">
+              <span id="active-focus-summary">7 chapitres PER actifs</span>
+              <button class="text-link-btn" id="parcours-customize-btn">Personnaliser mes chapitres ⚙️</button>
+            </div>
+          </div>
+
+          <!-- VIBE 2 EXCLUSIVE: Clean Nyon -> Montreux Railway Progress Track -->
+          <div class="vaud-quest-map-container">
+            <div class="quest-map-header">
+              <span>🚂 Ligne du Léman : Nyon → Montreux (Certificat)</span>
+              <span>Débloque chaque gare avec tes XP</span>
+            </div>
+            <div class="quest-stations-track" id="quest-stations-track">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+
+          <!-- VIBE 3 EXCLUSIVE: Minimalist Studio Telemetry Bar -->
+          <div class="studio-metrics-bar">
+            <div class="studio-metric-card">
+              <div class="metric-val" id="studio-accuracy">83%</div>
+              <div class="metric-lbl">Précision PER</div>
+            </div>
+            <div class="studio-metric-card">
+              <div class="metric-val" id="studio-answered">18</div>
+              <div class="metric-lbl">Analyses résolues</div>
+            </div>
+            <div class="studio-metric-card">
+              <div class="metric-val" id="studio-rank">#2 Vaud</div>
+              <div class="metric-lbl">Classement Amis</div>
+            </div>
+            <div class="studio-metric-card">
+              <div class="metric-val">[1-4]</div>
+              <div class="metric-lbl">Raccourcis Clavier</div>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div class="subject-switcher">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-          <span class="section-label" style="margin-bottom:0;">Branches actives</span>
-          <button id="sidebar-customize-btn" style="font-size:0.72rem; color:var(--accent-primary); font-weight:700;">
-            Modifier ⚙️
+        <!-- Active PER Chapters Section -->
+        <div class="section-block">
+          <div class="section-block-header">
+            <div>
+              <h2>📚 Mes chapitres ciblés (PER)</h2>
+              <p>Choisis un chapitre pour lancer une série d’exercices ciblés avec l’Aide-Mémoire officiel.</p>
+            </div>
+            <button class="secondary-btn" id="filter-topics-btn">
+              ⚙️ Filtrer les chapitres
+            </button>
+          </div>
+
+          <div class="chapters-grid" id="modules-overview-grid">
+            <!-- Populated dynamically by js/app.js -->
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ================================================================
+           VIEW 2: 🎯 ENTRAÎNEMENT (Zero-Scroll Viewport-Fit Lesson Frame)
+           ================================================================ -->
+      <section class="app-view" id="view-entrainement" data-view-panel="entrainement">
+
+        <!-- Compact Lesson Top Bar -->
+        <div class="lesson-topbar">
+          <button class="back-pill-btn" id="back-to-parcours-btn">
+            ← Parcours
           </button>
-        </div>
-        <div class="subject-tabs" id="subject-tabs-container">
-          <!-- Populated dynamically based on enabled subjects -->
-        </div>
-      </div>
 
-      <div>
-        <span class="section-label">Mes Chapitres Ciblés (PER)</span>
-        <nav class="nav-menu" id="module-nav-list">
-          <!-- Populated dynamically by js/app.js -->
-        </nav>
-      </div>
-
-      <div class="exam-countdown-box">
-        <h4>🎓 Cap sur le Certificat VP</h4>
-        <p id="readiness-pct-label">57% prêt pour le Certificat (340 / 600 XP)</p>
-        <div class="progress-bar-track">
-          <div class="progress-bar-fill" id="readiness-bar-fill" style="width: 57%;"></div>
-        </div>
-      </div>
-    </aside>
-
-    <!-- CENTER STAGE: Hero + Vibe-Specific Views + Interactive Exercise Arena -->
-    <main class="center-stage">
-
-      <!-- Dynamic Hero Banner -->
-      <section class="vibe-hero-banner">
-        <div class="hero-top-row">
-          <div class="hero-greeting">
-            <h2 id="hero-title">Objectif Gymnase — Espace Révision PER</h2>
-            <p id="hero-subtitle">
-              Entraîne-toi gratuitement sur le programme officiel vaudois (PER) avec Aide-Mémoire, répétition espacée et Coach IA.
-            </p>
+          <div class="lesson-chapter-select-wrap">
+            <label for="lesson-chapter-select" class="sr-only">Chapitre actif</label>
+            <select id="lesson-chapter-select" class="lesson-chapter-select">
+              <!-- Populated dynamically -->
+            </select>
           </div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button class="secondary-btn" id="hero-settings-btn">
-              🎯 Choisir mes sujets
-            </button>
-            <button class="quick-sprint-btn" id="hero-sprint-btn">
-              ⚡ Sprint Chrono 60s (+35 XP)
-            </button>
-          </div>
+
+          <span class="lesson-progress-pill" id="question-counter">Question 1 / 5</span>
         </div>
 
-        <!-- VIBE 2 EXCLUSIVE: Interactive Vaud Lake Geneva Quest Map -->
-        <div class="vaud-quest-map-container">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-            <span style="font-size:0.78rem; font-weight:700; color:var(--accent-primary);">
-              🚂 CARTE DE PROGRESSION : LIGNE DU LÉMAN (NYON → MONTREUX)
-            </span>
-            <span style="font-size:0.74rem; color:var(--text-secondary);">
-              Débloque chaque gare avec tes XP !
-            </span>
-          </div>
-          <div class="quest-stations-track" id="quest-stations-track">
-            <!-- Populated dynamically -->
-          </div>
-        </div>
+        <!-- Zero-Scroll Exercise Card (Fits inside calc(100vh - 84px)) -->
+        <div class="arena-card" id="arena-section">
 
-        <!-- VIBE 3 EXCLUSIVE: Minimalist Focus Studio Telemetry -->
-        <div class="studio-metrics-bar">
-          <div class="studio-metric-card">
-            <div class="metric-val" id="studio-accuracy">83%</div>
-            <div class="metric-lbl">Précision PER</div>
+          <!-- Compact Header: Chapter Title + Mode Pills -->
+          <div class="arena-header">
+            <div class="arena-title-group">
+              <span class="per-tag" id="arena-per-ref">PER L1 36</span>
+              <h2 id="arena-module-title">🧩 Propositions Subordonnées</h2>
+            </div>
+
+            <div class="mode-pills">
+              <button class="mode-pill active" data-mode="all">🎯 Standard</button>
+              <button class="mode-pill" data-mode="surgery">✂️ Chirurgie</button>
+              <button class="mode-pill" data-mode="mistakes" id="mistakes-mode-pill">🔁 Erreurs (0)</button>
+              <button class="mode-pill" data-mode="sprint">⏱️ Sprint 60s</button>
+              <span class="sprint-timer-pill" id="sprint-timer-badge" style="display:none;">⏱️ 60s</span>
+            </div>
           </div>
-          <div class="studio-metric-card">
-            <div class="metric-val" id="studio-answered">18</div>
-            <div class="metric-lbl">Analyses résolues</div>
+
+          <!-- POPOVER OVERLAY: Official PER Theory Sheet (Never pushes bottom bar off-screen!) -->
+          <div class="theory-sheet-drawer" id="theory-sheet-drawer">
+            <div class="drawer-top-row">
+              <h4 id="theory-sheet-title">📖 Aide-Mémoire Officiel PER</h4>
+              <button class="drawer-close-btn" id="close-theory-btn">Fermer ✕</button>
+            </div>
+            <ul class="theory-points-list" id="theory-points-list">
+              <!-- Populated dynamically -->
+            </ul>
           </div>
-          <div class="studio-metric-card">
-            <div class="metric-val" id="studio-rank">#2 Vaud</div>
-            <div class="metric-lbl">Classement Amis</div>
+
+          <!-- Core Question Workspace (Compact & Scroll-Safe) -->
+          <div class="question-workspace">
+            <div class="question-prompt" id="question-prompt">
+              Chargement de la question...
+            </div>
+
+            <!-- Standard Highlighted Sentence -->
+            <div class="sentence-showcase" id="sentence-showcase"></div>
+
+            <!-- Interactive Phrase Surgery Tokens -->
+            <div class="surgery-segments" id="surgery-container" style="display: none;"></div>
+
+            <!-- Big Tactile Answer Buttons (1-4) -->
+            <div class="options-grid" id="options-container"></div>
           </div>
-          <div class="studio-metric-card">
-            <div class="metric-val">[1-4]</div>
-            <div class="metric-lbl">Raccourcis Clavier</div>
+
+          <!-- DOCKED BOTTOM BAR: Compact Feedback Banner + Always-Visible Action Bar -->
+          <div class="arena-docked-bottom">
+            <!-- Instant PER Feedback Banner (Compact above action bar) -->
+            <div class="feedback-banner" id="feedback-banner">
+              <div class="feedback-header">
+                <span id="feedback-title">✅ Excellent !</span>
+              </div>
+              <p id="feedback-rule"></p>
+            </div>
+
+            <!-- Always-In-Frame Action Bar -->
+            <div class="arena-actions">
+              <div class="arena-actions-left">
+                <button class="secondary-btn compact-btn" id="toggle-theory-btn" title="Ouvrir ou fermer la fiche théorique officielle PER">
+                  📖 Aide-Mémoire PER
+                </button>
+                <button class="secondary-btn compact-btn" id="generate-infinite-btn" title="Générer dynamiquement un nouvel exercice sur ce chapitre">
+                  ✨ Nouvel exercice
+                </button>
+                <button class="secondary-btn compact-btn" id="explain-ai-btn" title="Demander l'explication de cette question au Coach IA">
+                  🤖 Expliquer
+                </button>
+              </div>
+              <button class="primary-cta-btn compact-cta-btn" id="next-question-btn">
+                Question suivante →
+              </button>
+            </div>
           </div>
+
         </div>
       </section>
 
-      <!-- INTERACTIVE EXERCISE ARENA -->
-      <section class="arena-card" id="arena-section">
-        <div class="arena-header">
-          <div>
-            <h3 id="arena-module-title" style="font-size: 1.12rem; font-weight: 800;">
-              🧩 Propositions Subordonnées
-            </h3>
-            <span class="per-tag" id="arena-per-ref">PER L1 36 — La phrase complexe</span>
+      <!-- ================================================================
+           VIEW 3: 🏆 DÉFIS & FAMILLE (Friends Duel, Leaderboard & Family Card)
+           ================================================================ -->
+      <section class="app-view" id="view-defis" data-view-panel="defis">
+        <div class="view-page-header">
+          <h1>🏆 Défis entre Amis &amp; Bilan Famille</h1>
+          <p>Révise à plusieurs avec tes camarades de 11e VP ou partage tes progrès de la semaine avec tes parents.</p>
+        </div>
+
+        <div class="defis-two-cards-grid">
+
+          <!-- CARD A: Vaud Friends Leaderboard & 1v1 Synchronous Duel -->
+          <div class="surface-card">
+            <div class="card-heading-row">
+              <div>
+                <h2>⚔️ Classement entre Amis &amp; Duel 1v1</h2>
+                <p>Défie un camarade sur les 5 mêmes questions du chapitre actif.</p>
+              </div>
+              <span class="per-tag" id="leaderboard-cloud-badge">Canton de Vaud</span>
+            </div>
+
+            <div class="leaderboard-list" id="leaderboard-list">
+              <!-- Populated dynamically -->
+            </div>
+
+            <div class="duel-generator-box">
+              <div class="duel-code-label">CODE DE DÉFI SYNCHRONE (<span id="duel-active-chapter">Subordonnées</span>)</div>
+              <div class="duel-code-value" id="duel-challenge-code">VD-11VP-4820</div>
+              <div class="duel-code-sub">Score à battre : <strong id="duel-xp-target">340 XP</strong> • 5 questions PER</div>
+
+              <div class="duel-actions-row">
+                <button class="primary-cta-btn" id="copy-duel-btn">
+                  🔗 Copier l’invitation Duel
+                </button>
+                <button class="secondary-btn" id="simulate-friend-btn">
+                  🤖 Simuler un duel contre Léo (+30 XP)
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div class="mode-pills">
-            <button class="mode-pill" id="toggle-theory-btn" title="Ouvrir la fiche de théorie officielle PER">
-              📖 Aide-Mémoire PER
+          <!-- CARD B: Family Progress Card (WhatsApp / Parents) -->
+          <div class="surface-card">
+            <div class="card-heading-row">
+              <div>
+                <h2>👨‍👩‍👧‍👦 Bilan Famille (WhatsApp / Parents)</h2>
+                <p>Un résumé clair à envoyer en 1 clic pour montrer ton sérieux avant le Certificat.</p>
+              </div>
+              <span class="per-tag">1 clic</span>
+            </div>
+
+            <div class="family-share-preview">
+              <div class="family-preview-tag">
+                🇨🇭 Bilan Hebdomadaire • 11e VP Canton de Vaud
+              </div>
+              <h4 id="family-student-heading">Objectif Gymnase — Programme PER</h4>
+              <p id="family-active-chapter">Chapitre révisé : Propositions Subordonnées</p>
+
+              <div class="family-share-grid">
+                <div class="family-stat-box">
+                  <strong id="family-stat-xp">340 XP</strong>
+                  <span>Points d’étude</span>
+                </div>
+                <div class="family-stat-box">
+                  <strong id="family-stat-acc">83%</strong>
+                  <span>Réussite PER</span>
+                </div>
+                <div class="family-stat-box">
+                  <strong id="family-stat-streak">🔥 5 j.</strong>
+                  <span>Série active</span>
+                </div>
+              </div>
+            </div>
+
+            <button class="primary-cta-btn full-width-btn" id="copy-family-msg-btn">
+              📲 Copier le résumé pour WhatsApp / Famille
             </button>
-            <button class="mode-pill active" data-mode="all">🎯 Exercices</button>
-            <button class="mode-pill" data-mode="surgery">✂️ Chirurgie</button>
-            <button class="mode-pill" data-mode="mistakes" id="mistakes-mode-pill">🔁 Mes erreurs (0)</button>
-            <button class="mode-pill" data-mode="sprint">⏱️ Sprint 60s</button>
-            <span class="stat-pill" id="sprint-timer-badge" style="display:none; color:var(--accent-danger);">⏱️ 60s</span>
           </div>
-        </div>
 
-        <!-- OFFICIAL PER THEORY SHEET DRAWER (Khan Academy / Aide-Mémoire Pattern) -->
-        <div class="theory-sheet-drawer" id="theory-sheet-drawer">
-          <h4>
-            <span id="theory-sheet-title">📖 Aide-Mémoire Officiel PER</span>
-            <button id="close-theory-btn" style="font-size:0.78rem; color:var(--text-secondary);">Fermer ✕</button>
-          </h4>
-          <ul class="theory-points-list" id="theory-points-list">
-            <!-- Populated dynamically -->
-          </ul>
-        </div>
-
-        <div class="question-meta-bar">
-          <span id="question-counter">Question 1 sur 5</span>
-          <span>Terminologie officielle Canton de Vaud (DGEO / PER)</span>
-        </div>
-
-        <div class="question-prompt" id="question-prompt">
-          Chargement de la question...
-        </div>
-
-        <!-- Standard Sentence Showcase -->
-        <div class="sentence-showcase" id="sentence-showcase"></div>
-
-        <!-- Phrase Surgery Interactive Tokens -->
-        <div class="surgery-segments" id="surgery-container" style="display: none;"></div>
-
-        <!-- Multiple Choice Options -->
-        <div class="options-grid" id="options-container"></div>
-
-        <!-- Instant PER Feedback Banner -->
-        <div class="feedback-banner" id="feedback-banner">
-          <div class="feedback-header">
-            <span id="feedback-title">✅ Excellent !</span>
-          </div>
-          <p id="feedback-rule" style="font-size: 0.88rem; color: var(--text-secondary);"></p>
-        </div>
-
-        <div class="arena-actions">
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button class="secondary-btn" id="explain-ai-btn">
-              🤖 Astuce Coach IA
-            </button>
-            <button class="secondary-btn" id="generate-infinite-btn" title="Génère dynamiquement un nouvel exercice conforme au PER Vaud">
-              ✨ Générer un nouvel exercice (Infini)
-            </button>
-          </div>
-          <button class="quick-sprint-btn" id="next-question-btn">
-            Question suivante →
-          </button>
         </div>
       </section>
 
-      <!-- OVERVIEW OF FOCUS MODULES -->
-      <section>
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-          <h3 style="font-size: 1.05rem; font-weight: 800;">📚 Mes modules d’entraînement actifs (PER 11e VP)</h3>
-          <button class="secondary-btn" id="filter-topics-btn" style="padding: 5px 10px; font-size: 0.76rem;">
-            ⚙️ Filtrer les sujets
-          </button>
+      <!-- ================================================================
+           VIEW 4: ⚙️ PARAMÈTRES (Themes, Subjects, Chapters & Firebase Cloud)
+           ================================================================ -->
+      <section class="app-view" id="view-parametres" data-view-panel="parametres">
+        <div class="view-page-header">
+          <h1>⚙️ Paramètres &amp; Personnalisation</h1>
+          <p>Adapte l’ambiance visuelle, tes branches d’étude, tes chapitres ciblés et la synchronisation Cloud Firebase.</p>
         </div>
-        <div class="modules-grid" id="modules-overview-grid">
-          <!-- Populated dynamically -->
+
+        <!-- 1. Visual Theme Selector -->
+        <div class="surface-card settings-card">
+          <h2>🎨 1. Thème visuel</h2>
+          <p class="settings-desc">Choisis l’interface qui t’aide le mieux à te concentrer :</p>
+
+          <div class="theme-cards-grid">
+            <button class="theme-choice-card active" data-pick-vibe="academic">
+              <span class="theme-badge-icon">🏛️</span>
+              <strong>Lausanne Neo-Academic</strong>
+              <span>Clarté typographique suisse, vert émeraude vaudois &amp; papier reposant.</span>
+            </button>
+            <button class="theme-choice-card" data-pick-vibe="quest">
+              <span class="theme-badge-icon">🗺️</span>
+              <strong>Vaud Quest Map</strong>
+              <span>Mode aventure avec la ligne CFF du Léman (Nyon → Montreux).</span>
+            </button>
+            <button class="theme-choice-card" data-pick-vibe="studio">
+              <span class="theme-badge-icon">⚡</span>
+              <strong>Minimalist Focus Studio</strong>
+              <span>Mode sombre haute concentration &amp; raccourcis clavier [1-4].</span>
+            </button>
+          </div>
         </div>
+
+        <!-- 2. Active Subjects -->
+        <div class="surface-card settings-card">
+          <h2>📚 2. Branches actives (11e VP Vaud)</h2>
+          <p class="settings-desc">Active ou masque l’aperçu d’Allemand en plus du programme complet de Français :</p>
+
+          <div class="focus-checklist">
+            <label class="focus-check-item">
+              <span class="focus-check-left">
+                <input type="checkbox" checked disabled />
+                <span>📘 <strong>Français 11e VP</strong> — Programme officiel complet (7 chapitres PER L1 31-38)</span>
+              </span>
+              <span class="per-tag">Branche principale</span>
+            </label>
+            <label class="focus-check-item">
+              <span class="focus-check-left">
+                <input type="checkbox" id="toggle-german-subj" />
+                <span>🇩🇪 <strong>Allemand 11e VP (Option / Aperçu)</strong> — PER L2 (Nebensätze, Perfekt)</span>
+              </span>
+              <span class="placeholder-pill">Optionnel</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 3. Targeted French PER Chapters -->
+        <div class="surface-card settings-card">
+          <div class="card-heading-row">
+            <div>
+              <h2>🎯 3. Chapitres ciblés en Français (Focus)</h2>
+              <p class="settings-desc" style="margin-bottom:0;">Coche les chapitres que tu souhaites travailler dans l’onglet <strong>📚 Parcours</strong> :</p>
+            </div>
+            <button class="secondary-btn" id="select-all-chapters-btn">Tout cocher</button>
+          </div>
+
+          <div class="focus-checklist" id="focus-topics-checklist" style="margin-top: 14px;">
+            <!-- Populated dynamically by js/app.js -->
+          </div>
+        </div>
+
+        <!-- 4. Firebase Cloud Connection (edutech.emtechnica.ch) -->
+        <div class="surface-card settings-card">
+          <div class="card-heading-row">
+            <div>
+              <h2>☁️ 4. Connexion Cloud Firebase (edutech.emtechnica.ch)</h2>
+              <p class="settings-desc" style="margin-bottom:0;">
+                Synchronise les profils élèves, la file « Mes erreurs » et les Duels 1v1 via Firebase Auth &amp; Cloud Firestore (conforme nLPD Suisse).
+              </p>
+            </div>
+            <span class="per-tag" id="firebase-status-pill">Mode Local-First</span>
+          </div>
+
+          <div class="firebase-infra-badges">
+            <span class="per-tag">✅ firebase.json (Hosting SPA)</span>
+            <span class="per-tag">🔒 firestore.rules (Anti-privilèges &amp; Ownership)</span>
+            <span class="per-tag">📊 firestore.indexes.json (Leaderboard XP)</span>
+          </div>
+
+          <div class="firebase-config-form">
+            <label for="firebase-config-input" class="settings-label">
+              Configuration Web SDK Firebase (JSON complet ou <code>{"apiKey":"...","projectId":"..."}</code>) :
+            </label>
+            <textarea
+              id="firebase-config-input"
+              class="firebase-config-textarea"
+              rows="3"
+              placeholder='{"apiKey": "AIzaSy...", "authDomain": "objectif-gymnase-vaud.firebaseapp.com", "projectId": "objectif-gymnase-vaud"}'
+            ></textarea>
+            <div class="firebase-config-actions">
+              <button class="secondary-btn" id="open-auth-from-settings-btn">
+                👤 Gérer mon profil élève
+              </button>
+              <button class="primary-cta-btn compact-cta-btn" id="save-firebase-config-btn">
+                ☁️ Connecter Firebase
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. Version v1.3.0 & Product Backlog -->
+        <div class="surface-card settings-card">
+          <div class="card-heading-row">
+            <div>
+              <h2>📋 5. Version v1.3.0 &amp; Feuille de route</h2>
+              <p class="settings-desc" style="margin-bottom:0;">Plateforme 100% gratuite et sans publicité pour les élèves de 11e VP du Canton de Vaud.</p>
+            </div>
+            <span class="per-tag">v1.3.0</span>
+          </div>
+
+          <div class="roadmap-columns">
+            <div class="roadmap-box">
+              <h4>✅ Livré en v1.3.0 (Cloud Firebase &amp; Chapitre 7 Orthographe)</h4>
+              <ul class="theory-points-list">
+                <li><strong>✒️ Chapitre 7 — Orthographe &amp; Accord du Participe Passé (PER L1 37)</strong> : Auxiliaires être/avoir (CDV antéposé) et verbes pronominaux (<em>se succéder, se laver les mains</em>).</li>
+                <li><strong>👤 Profil Élève &amp; Cloud Firebase (`edutech.emtechnica.ch`)</strong> : Connexion rapide par Pseudo vaudois (conforme nLPD) ou Email/Google, avec règles `firestore.rules` durcies.</li>
+                <li><strong>🤖 Coach IA Fixe &amp; Exercices Zéro-Scroll</strong> : Toujours visibles à l’écran sans jamais défiler.</li>
+              </ul>
+            </div>
+
+            <div class="roadmap-box">
+              <h4>🚀 Prochaines étapes (Backlog)</h4>
+              <ul class="theory-points-list">
+                <li><strong>v1.4.0 — Examen Blanc du Certificat Vaud</strong> : Simulation chronométrée complète (compréhension + texte argumentatif).</li>
+                <li><strong>v1.5.0 — Programme Complet Allemand 11e VP</strong> : Extension de tous les chapitres PER L2 (Perfekt, Präteritum, Passiv).</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
       </section>
 
     </main>
 
-    <!-- RIGHT RAIL: Free AI Study Coach + Social Leaderboard & Family Sharing -->
-    <aside class="right-rail">
-
-      <!-- FREE AI COACH CARD -->
-      <div class="rail-card">
-        <div class="rail-card-header">
-          <h3>🤖 Ton Coach IA 11e VP <span class="per-tag">Gratuit</span></h3>
-          <button class="secondary-btn" id="config-api-key-btn" style="padding: 4px 8px; font-size: 0.72rem;" title="Configurer une clé Gemini gratuite (optionnel)">
+    <!-- ==================================================================
+         RIGHT COLUMN: FIXED / STICKY AI STUDY COACH PANEL
+         Always stays in frame when scrolling the main page!
+         ================================================================== -->
+    <aside class="sticky-ai-rail" aria-label="Coach IA 11e VP">
+      <div class="sticky-ai-card" id="ai-coach-drawer">
+        <div class="ai-panel-header">
+          <div>
+            <h3>🤖 Coach IA 11e VP</h3>
+            <span class="ai-panel-subtitle">Terminologie officielle PER Vaud</span>
+          </div>
+          <button class="secondary-btn" id="config-api-key-btn" style="padding: 4px 9px; font-size: 0.72rem;" title="Configurer une clé Gemini gratuite (optionnel)">
             ⚙️ API
           </button>
         </div>
 
         <div class="ai-chat-history" id="ai-chat-history">
           <div class="ai-msg bot">
-            Salut ! 👋 Je suis ton <strong>Coach 11e VP Vaud</strong>. Pose-moi une question sur les <em>subordonnées</em>, les <em>fonctions PER (CP, CDV)</em>, le <em>discours indirect</em>, ou colle un paragraphe de ton <strong>texte argumentatif</strong> !
+            Salut ! 👋 Je suis ton <strong>Coach 11e VP Vaud</strong>. Je reste toujours visible ici à côté de ta page : pose-moi une question sur l’exercice en cours, les <em>subordonnées</em>, les <em>fonctions PER (CP, CDV)</em>, l’<em>accord du participe passé</em>, ou colle ton paragraphe argumentatif !
           </div>
         </div>
 
-        <div class="ai-quick-chips">
-          <button class="ai-chip" data-prompt="Quelle est la différence entre subordonnée relative et complétive ?">
-            Relative vs Complétive ?
-          </button>
-          <button class="ai-chip" data-prompt="Explique-moi le Complément de phrase (CP) dans le PER Vaud.">
-            C’est quoi un CP ?
-          </button>
-          <button class="ai-chip" data-prompt="Comment structurer une introduction de texte argumentatif au Certificat ?">
-            Intro Argumentative
-          </button>
-        </div>
+        <div class="ai-panel-footer">
+          <div class="ai-quick-chips">
+            <button class="ai-chip" data-prompt="Explique-moi cette question et la règle du PER Vaud.">
+              💡 Expliquer cet ex.
+            </button>
+            <button class="ai-chip" data-prompt="Quelle est la différence entre subordonnée relative et complétive ?">
+              Relative vs Complétive
+            </button>
+            <button class="ai-chip" data-prompt="Explique-moi le Complément de phrase (CP) dans le PER Vaud.">
+              Fonction CP ?
+            </button>
+            <button class="ai-chip" data-prompt="Comment structurer une introduction de texte argumentatif au Certificat ?">
+              Intro Argumentative
+            </button>
+          </div>
 
-        <div class="ai-input-row">
-          <input
-            type="text"
-            id="ai-user-input"
-            placeholder="Pose un doute ou colle ton texte..."
-            aria-label="Message au Coach IA"
-          />
-          <button class="ai-send-btn" id="ai-send-btn">Envoyer</button>
-        </div>
-      </div>
-
-      <!-- SOCIAL COMPETITION & FAMILY SHARE CARD -->
-      <div class="rail-card">
-        <div class="rail-card-header">
-          <h3>🏆 Classement entre Amis (Vaud)</h3>
-          <span class="per-tag">Semaine 45</span>
-        </div>
-
-        <div class="leaderboard-list" id="leaderboard-list">
-          <!-- Populated dynamically -->
-        </div>
-
-        <div class="share-buttons-stack">
-          <button class="secondary-btn" id="open-duel-modal-btn" style="justify-content:center;">
-            ⚔️ Défier un ami
-          </button>
-          <button class="secondary-btn" id="open-family-modal-btn" style="justify-content:center;">
-            👨‍👩‍👧‍👦 Bilan Famille
-          </button>
+          <div class="ai-input-row">
+            <input
+              type="text"
+              id="ai-user-input"
+              placeholder="Pose une question au Coach..."
+              aria-label="Message au Coach IA"
+            />
+            <button class="ai-send-btn" id="ai-send-btn">Envoyer</button>
+          </div>
         </div>
       </div>
-
     </aside>
+
   </div>
 
   <!-- ====================================================================
-       FOOTER: VERSION, OPEN SOURCE MISSION & BACKLOG LINK
+       STUDENT AUTH & PROFILE MODAL (Connexion Rapide nLPD Vaud / Firebase Auth)
+       ==================================================================== -->
+  <div class="modal-backdrop" id="auth-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+    <div class="modal-card" id="auth-modal-content">
+      <!-- Populated dynamically by js/app.js -->
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       MINIMAL FOOTER
        ==================================================================== -->
   <footer class="app-footer">
-    <div>
-      <strong>Objectif Gymnase — 11e VP Vaud (v1.1.0)</strong> • Plateforme d’étude 100% gratuite alignée sur le Plan d’études romand (PER).
-    </div>
-    <div style="display:flex; gap:12px;">
-      <button id="footer-roadmap-btn" style="color:var(--accent-primary); font-weight:700;">
-        📋 Voir le Backlog & Versions (v1.1.0)
-      </button>
-    </div>
+    <span><strong>Objectif Gymnase — 11e VP Vaud (v1.3.0)</strong> • Aligné sur le Plan d’études romand (PER)</span>
+    <span>100% Gratuit • Propulsé par Firebase &amp; Conforme nLPD Suisse</span>
   </footer>
-
-  <!-- ====================================================================
-       UNIFIED MODAL: SETTINGS + ROADMAP/BACKLOG + DUEL + FAMILY
-       ==================================================================== -->
-  <div class="modal-backdrop" id="social-modal-backdrop">
-    <div class="modal-card" id="social-modal-content">
-      <!-- Populated dynamically -->
-    </div>
-  </div>
 
   <script src="js/data.js"></script>
   <script src="js/ai-coach.js"></script>
+  <script src="js/firebase-service.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -1,0 +1,261 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model — Objectif Gymnase (11e VP Vaud)
+// ===============================================================
+//
+// This security rules file assumes the following data structures:
+//
+// Collection: profiles
+// Document ID: {userId} (matches request.auth.uid)
+// Fields:
+//   - pseudo: string (required, 1..40 chars) - Student pseudonym (no PII)
+//   - etablissement: string (optional, 0..100 chars) - Vaud school name
+//   - xp: int (required, 0..10000000) - Total experience points
+//   - streak: int (required, 0..10000) - Consecutive study days
+//   - answeredCount: int (required, 0..1000000) - Total questions answered
+//   - correctCount: int (required, 0..1000000) - Total questions answered correctly
+//   - vibe: string (required, 'academic' | 'quest' | 'studio') - Active UI theme
+//   - enabledSubjects: list (required, max 10 items) - Enabled subject keys
+//   - focusedModules: list (required, max 50 items) - Active PER chapter IDs
+//   - updatedAt: timestamp (required) - Last profile sync timestamp
+//
+// Subcollection: profiles/{userId}/mistakes
+// Document ID: {questionId}
+// Fields:
+//   - id: string (required, 1..100 chars) - Question identifier
+//   - type: string (required, 'mcq' | 'surgery') - Exercise type
+//   - prompt: string (required, 1..500 chars) - Question prompt
+//   - perRule: string (required, 1..1000 chars) - Official PER rule explanation
+//   - sentence: string (optional, 0..1000 chars) - Target sentence (MCQ)
+//   - options: list (optional, max 10 items) - Choice options (MCQ)
+//   - correctIndex: int (optional, 0..10) - Correct option index (MCQ)
+//   - tokens: list (optional, max 50 items) - Clickable word tokens (Surgery)
+//   - correctTokenIndex: int (optional, 0..50) - Target token index (Surgery)
+//   - isGenerated: bool (optional) - Whether procedurally generated
+//   - addedAt: timestamp (optional) - When the mistake was queued
+//
+// Collection: exercises
+// Document ID: {exerciseId}
+// Fields:
+//   - Managed exclusively via Admin SDK / seed scripts (client read-only).
+//
+// Collection: duels
+// Document ID: {duelId}
+// Fields:
+//   - challengeCode: string (required, 1..30 chars, immutable) - Shareable Vaud duel code
+//   - challengerId: string (required, 1..128 chars, immutable) - Creator UID
+//   - challengerName: string (required, 1..40 chars, immutable) - Creator pseudo
+//   - challengerScore: int (required, 0..1000000) - Creator XP/score
+//   - moduleId: string (required, 1..60 chars, immutable) - PER chapter ID
+//   - moduleTitle: string (required, 1..120 chars, immutable) - PER chapter title
+//   - opponentId: string (optional, 1..128 chars) - Opponent UID
+//   - opponentName: string (optional, 1..40 chars) - Opponent pseudo
+//   - opponentScore: int (optional, 0..1000000) - Opponent score
+//   - status: string (required, 'open' | 'completed') - Duel lifecycle status
+//   - createdAt: timestamp (optional, immutable) - Creation timestamp
+//   - updatedAt: timestamp (optional) - Last update timestamp
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    // Check if the user is authenticated (including anonymous auth)
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if user owns the resource based on path userId
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Validate required fields exist on the incoming document
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // Validate that the document contains only the allowed fields
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // Validate string type and character length bounds
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    // Validate optional string (if present, must be string within length bounds)
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+        (request.resource.data[field] is string &&
+         request.resource.data[field].size() >= minLen &&
+         request.resource.data[field].size() <= maxLen);
+    }
+
+    // Validate bounded non-negative integer
+    function isValidNonNegativeInt(field, maxVal) {
+      return request.resource.data[field] is int &&
+        request.resource.data[field] >= 0 &&
+        request.resource.data[field] <= maxVal;
+    }
+
+    // Validate optional bounded non-negative integer
+    function isValidOptionalNonNegativeInt(field, maxVal) {
+      return !(field in request.resource.data) ||
+        (request.resource.data[field] is int &&
+         request.resource.data[field] >= 0 &&
+         request.resource.data[field] <= maxVal);
+    }
+
+    // Validate that a list is a list and enforces size limits
+    function isValidList(listData, maxSize) {
+      return listData is list && listData.size() <= maxSize;
+    }
+
+    // Validate that immutable fields have not been modified during an update
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators (Used in BOTH create and update)
+    // ===============================================================
+
+    function isValidProfile(data) {
+      return hasRequiredFields([
+          'pseudo', 'xp', 'streak', 'answeredCount', 'correctCount',
+          'vibe', 'enabledSubjects', 'focusedModules', 'updatedAt'
+        ]) &&
+        hasOnlyAllowedFields([
+          'pseudo', 'etablissement', 'xp', 'streak', 'answeredCount',
+          'correctCount', 'vibe', 'enabledSubjects', 'focusedModules', 'updatedAt'
+        ]) &&
+        validStringLength('pseudo', 1, 40) &&
+        isValidOptionalString('etablissement', 0, 100) &&
+        isValidNonNegativeInt('xp', 10000000) &&
+        isValidNonNegativeInt('streak', 10000) &&
+        isValidNonNegativeInt('answeredCount', 1000000) &&
+        isValidNonNegativeInt('correctCount', 1000000) &&
+        data.correctCount <= data.answeredCount &&
+        data.vibe in ['academic', 'quest', 'studio'] &&
+        isValidList(data.enabledSubjects, 10) &&
+        data.enabledSubjects.size() >= 1 &&
+        isValidList(data.focusedModules, 50) &&
+        data.focusedModules.size() >= 1 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidMistake(data) {
+      return hasRequiredFields(['id', 'type', 'prompt', 'perRule']) &&
+        hasOnlyAllowedFields([
+          'id', 'type', 'prompt', 'perRule', 'sentence', 'options',
+          'correctIndex', 'tokens', 'correctTokenIndex', 'isGenerated', 'addedAt'
+        ]) &&
+        validStringLength('id', 1, 100) &&
+        data.type in ['mcq', 'surgery'] &&
+        validStringLength('prompt', 1, 500) &&
+        validStringLength('perRule', 1, 1000) &&
+        isValidOptionalString('sentence', 0, 1000) &&
+        (!('options' in data) || isValidList(data.options, 10)) &&
+        isValidOptionalNonNegativeInt('correctIndex', 10) &&
+        (!('tokens' in data) || isValidList(data.tokens, 50)) &&
+        isValidOptionalNonNegativeInt('correctTokenIndex', 50) &&
+        (!('isGenerated' in data) || data.isGenerated is bool) &&
+        (!('addedAt' in data) || data.addedAt is timestamp);
+    }
+
+    function isValidDuel(data) {
+      return hasRequiredFields([
+          'challengeCode', 'challengerId', 'challengerName',
+          'challengerScore', 'moduleId', 'moduleTitle', 'status'
+        ]) &&
+        hasOnlyAllowedFields([
+          'challengeCode', 'challengerId', 'challengerName', 'challengerScore',
+          'moduleId', 'moduleTitle', 'opponentId', 'opponentName',
+          'opponentScore', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        validStringLength('challengeCode', 1, 30) &&
+        validStringLength('challengerId', 1, 128) &&
+        validStringLength('challengerName', 1, 40) &&
+        isValidNonNegativeInt('challengerScore', 1000000) &&
+        validStringLength('moduleId', 1, 60) &&
+        validStringLength('moduleTitle', 1, 120) &&
+        isValidOptionalString('opponentId', 1, 128) &&
+        isValidOptionalString('opponentName', 1, 40) &&
+        isValidOptionalNonNegativeInt('opponentScore', 1000000) &&
+        data.status in ['open', 'completed'] &&
+        (!('createdAt' in data) || data.createdAt is timestamp) &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // 1. Student Profiles & Vaud Leaderboard (non-PII pseudonyms & XP metrics)
+    match /profiles/{userId} {
+      allow read: if true;
+      allow create: if isOwner(userId) && isValidProfile(request.resource.data);
+      allow update: if isOwner(userId) && isValidProfile(request.resource.data);
+      allow delete: if isOwner(userId);
+
+      // 2. Student Personal Spaced Repetition Mistake Queue ("Mes erreurs")
+      match /mistakes/{questionId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidMistake(request.resource.data);
+        allow update: if isOwner(userId) && isValidMistake(request.resource.data) &&
+          areImmutableFieldsUnchanged(['id', 'addedAt']);
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // 3. Central Bank of Verified Vaud 11e VP PER Exercises
+    match /exercises/{exerciseId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // 4. Synchronous / Asynchronous 1v1 Friend Duels
+    match /duels/{duelId} {
+      allow read: if true;
+
+      allow create: if isAuthenticated() &&
+        isValidDuel(request.resource.data) &&
+        request.resource.data.challengerId == request.auth.uid &&
+        request.resource.data.status == 'open';
+
+      allow update: if isAuthenticated() &&
+        isValidDuel(request.resource.data) &&
+        areImmutableFieldsUnchanged([
+          'challengeCode', 'challengerId', 'challengerName',
+          'moduleId', 'moduleTitle', 'createdAt'
+        ]) &&
+        (
+          // Challenger updating their own open/completed duel
+          resource.data.challengerId == request.auth.uid ||
+          // Opponent accepting an open duel and recording their score
+          (
+            resource.data.status == 'open' &&
+            request.resource.data.status == 'completed' &&
+            request.resource.data.challengerScore == resource.data.challengerScore &&
+            request.resource.data.opponentId == request.auth.uid
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // Default Deny for all other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

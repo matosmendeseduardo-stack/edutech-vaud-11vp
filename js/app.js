@@ -1,18 +1,18 @@
 /* ==========================================================================
    Main Application Controller — Objectif Gymnase (11e VP Vaud)
-   Version: v1.1.0
+   Version: v1.3.0 (Firebase Auth & Cloud Firestore + Chapitre 7 Orthographe)
    Includes:
-   - Full App Parametrization (Themes, Subjects, Topic Focus)
-   - Official PER Aide-Mémoire Theory Drawer (Khan Academy Pattern)
-   - Spaced Repetition Mistake Queue "Mes erreurs" (Anki/Voltaire Pattern)
-   - Infinite Procedural PER Exercise Generation
-   - In-App Version & Backlog Tracker
+   - 7 Official Français 11e VP Chapters (including Module 7: Orthographe & PP)
+   - Student Auth & Profile Modal (nLPD Vaud Quick Pseudo + Email/Google Auth)
+   - Automatic Cloud Firestore Profile, Mistake Queue & 1v1 Duel Sync
+   - Sticky AI Coach Next to Main Page + Zero-Scroll Exercise Frame
    ========================================================================== */
 
 const CURRICULUM_DATA = window.CURRICULUM_DATA;
 const VAUD_QUEST_STATIONS = window.VAUD_QUEST_STATIONS;
 const INITIAL_LEADERBOARD = window.INITIAL_LEADERBOARD;
 const VaudAICoach = window.VaudAICoach;
+const VaudFirebaseService = window.VaudFirebaseService;
 const PERExerciseGenerator = window.PERExerciseGenerator;
 
 class ObjectifGymnaseApp {
@@ -22,10 +22,16 @@ class ObjectifGymnaseApp {
     const savedFocus = JSON.parse(localStorage.getItem('vaud_focused_modules') || JSON.stringify(defaultFrancaisFocus));
     const savedMistakes = JSON.parse(localStorage.getItem('vaud_mistake_questions') || '[]');
 
-    // Ensure newly added v1.1.0 modules are included if user had older 4-module list
-    const mergedFocus = [...new Set([...savedFocus, ...defaultFrancaisFocus.filter(id => !localStorage.getItem('vaud_focused_customized'))])];
+    // Automatically include new v1.3.0 modules (like 'orthographe') unless user customized focus
+    const mergedFocus = [
+      ...new Set([
+        ...savedFocus,
+        ...defaultFrancaisFocus.filter(() => !localStorage.getItem('vaud_focused_customized'))
+      ])
+    ];
 
     this.state = {
+      activeView: 'parcours', // 'parcours' | 'entrainement' | 'defis' | 'parametres'
       vibe: localStorage.getItem('vaud_vibe') || 'academic',
       enabledSubjects: savedSubjects.length ? savedSubjects : ['francais'],
       focusedModules: mergedFocus.length ? mergedFocus : defaultFrancaisFocus,
@@ -42,42 +48,356 @@ class ObjectifGymnaseApp {
       answeredCurrent: false,
       sprintTimer: null,
       sprintSecondsLeft: 60,
-      leaderboard: [...INITIAL_LEADERBOARD]
+      duelCode: `VD-11VP-${Math.floor(1000 + Math.random() * 9000)}`,
+      leaderboard: [...INITIAL_LEADERBOARD],
+      currentUser: null,
+      isCloudConnected: false
     };
 
     this.aiCoach = new VaudAICoach();
+    this.firebaseService = VaudFirebaseService
+      ? new VaudFirebaseService((user, isCloud, cloudProfile) => this.handleAuthStateChanged(user, isCloud, cloudProfile))
+      : null;
+
     this.init();
   }
 
   init() {
-    this.applyVibe(this.state.vibe);
+    this.applyVibe(this.state.vibe, false);
     this.bindGlobalEvents();
     this.renderAll();
   }
 
   /* ------------------------------------------------------------------------
+     Firebase Auth & Cloud Profile State Handler
+     ------------------------------------------------------------------------ */
+  async handleAuthStateChanged(user, isCloudConnected, cloudProfile = null) {
+    this.state.currentUser = user;
+    this.state.isCloudConnected = Boolean(isCloudConnected);
+
+    // Merge cloud profile stats if higher / available
+    if (cloudProfile) {
+      if (typeof cloudProfile.xp === 'number' && cloudProfile.xp > this.state.xp) {
+        this.state.xp = cloudProfile.xp;
+        localStorage.setItem('vaud_xp', String(this.state.xp));
+      }
+      if (typeof cloudProfile.streak === 'number') {
+        this.state.streak = cloudProfile.streak;
+        localStorage.setItem('vaud_streak', String(this.state.streak));
+      }
+    }
+
+    // Update "isMe" entry in leaderboard with student's custom pseudo, avatar & school
+    const meRow = this.state.leaderboard.find(r => r.isMe);
+    if (meRow) {
+      if (user) {
+        meRow.name = `${user.pseudo} (${user.etablissement || 'Vaud'})`;
+        meRow.avatar = user.avatar || '⚡';
+      } else {
+        meRow.name = 'Toi (Élève 11e VP)';
+        meRow.avatar = '⚡';
+      }
+      meRow.xp = this.state.xp;
+    }
+
+    // If connected to Cloud Firestore, attempt to fetch live leaderboard
+    if (this.firebaseService && this.state.isCloudConnected) {
+      const cloudRows = await this.firebaseService.fetchLeaderboard();
+      if (cloudRows && cloudRows.length > 0) {
+        this.state.leaderboard = cloudRows;
+      }
+    }
+
+    this.renderAuthHeaderPill();
+    this.renderHeaderAndReadiness();
+    this.renderDefisAndFamilyView();
+    this.renderSettingsView();
+  }
+
+  renderAuthHeaderPill() {
+    const labelEl = document.getElementById('user-auth-label');
+    const pillEl = document.getElementById('user-auth-pill');
+    if (!labelEl || !pillEl) return;
+
+    const u = this.state.currentUser;
+    if (u && u.pseudo) {
+      pillEl.innerHTML = `${u.avatar || '⚡'} <span id="user-auth-label">${u.pseudo} (${u.etablissement || 'Vaud'})</span>`;
+    } else {
+      pillEl.innerHTML = `👤 <span id="user-auth-label">Connexion / Profil</span>`;
+    }
+  }
+
+  syncStateToCloud() {
+    if (!this.firebaseService) return;
+    this.firebaseService.syncProfile({
+      xp: this.state.xp,
+      streak: this.state.streak,
+      answeredCount: this.state.answeredCount,
+      correctCount: this.state.correctCount,
+      vibe: this.state.vibe,
+      enabledSubjects: this.state.enabledSubjects,
+      focusedModules: this.state.focusedModules
+    });
+  }
+
+  /* ------------------------------------------------------------------------
+     Student Connexion & Profile Modal (nLPD Vaud Pseudo + Email/Google)
+     ------------------------------------------------------------------------ */
+  openAuthModal() {
+    const backdrop = document.getElementById('auth-modal-backdrop');
+    const content = document.getElementById('auth-modal-content');
+    if (!backdrop || !content) return;
+
+    const u = this.state.currentUser;
+    const currentPseudo = u?.pseudo || '';
+    const currentSchool = u?.etablissement || 'Collège de Béthusy (Lausanne)';
+    const currentAvatar = u?.avatar || '⚡';
+    const cloudBadgeText = this.state.isCloudConnected
+      ? '☁️ Cloud Firebase Connecté'
+      : '💾 Mode Local-First (Conforme nLPD)';
+
+    const avatars = ['⚡', '🦊', '🏔️', '📚', '🎯', '🇨🇭'];
+    const schools = [
+      'Collège de Béthusy (Lausanne)',
+      'Établissement de Nyon-Marens',
+      'Morges Beausobre',
+      'Établissement de Vevey',
+      'Établissement d’Yverdon',
+      'Autre établissement vaudois'
+    ];
+
+    content.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+        <div>
+          <h3 id="auth-modal-title" style="font-size:1.18rem; font-weight:800;">👤 Connexion &amp; Profil Élève 11e VP</h3>
+          <p style="font-size:0.82rem; color:var(--text-secondary); margin-top:2px;">
+            Sauvegarde tes XP, tes chapitres ciblés et ton classement entre amis dans le Canton de Vaud.
+          </p>
+        </div>
+        <button class="drawer-close-btn" id="close-auth-modal-btn">Fermer ✕</button>
+      </div>
+
+      ${u ? `
+        <div class="profile-active-banner">
+          <div>
+            <div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; color:var(--accent-primary);">
+              Profil actif • ${cloudBadgeText}
+            </div>
+            <div style="font-size:1.02rem; font-weight:800; margin-top:2px;">
+              ${u.avatar || '⚡'} ${u.pseudo} — <span style="font-weight:600; color:var(--text-secondary);">${u.etablissement}</span>
+            </div>
+            <div style="font-size:0.78rem; color:var(--text-secondary); margin-top:2px;">
+              Score : <strong>${this.state.xp} XP</strong> • Série : <strong>🔥 ${this.state.streak} j.</strong>
+            </div>
+          </div>
+          <button class="secondary-btn compact-btn" id="auth-signout-btn" style="border-color:var(--accent-danger); color:var(--accent-danger);">
+            Se déconnecter
+          </button>
+        </div>
+      ` : ''}
+
+      <!-- OPTION A: Quick Vaud Student Pseudo (Recommended nLPD) -->
+      <div class="auth-option-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+          <h4>⚡ Option A — Connexion Rapide Élève (Recommandé nLPD Vaud)</h4>
+          <span class="per-tag">Sans email requis</span>
+        </div>
+        <p style="font-size:0.78rem; color:var(--text-secondary);">
+          Choisis un pseudonyme, ton collège vaudois et ton avatar pour apparaître dans le classement et synchroniser tes progrès :
+        </p>
+
+        <div class="auth-form-grid">
+          <div class="auth-field">
+            <label for="auth-pseudo-input">Pseudonyme (ex: Lucas_VD)</label>
+            <input type="text" id="auth-pseudo-input" class="auth-input" placeholder="Ton pseudo..." value="${currentPseudo}" maxlength="32" />
+          </div>
+          <div class="auth-field">
+            <label for="auth-school-select">Établissement Vaudois</label>
+            <select id="auth-school-select" class="auth-input">
+              ${schools.map(s => `<option value="${s}" ${s === currentSchool ? 'selected' : ''}>${s}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="auth-field">
+          <label>Choisis ton avatar :</label>
+          <div class="avatar-picker-row" id="auth-avatar-picker">
+            ${avatars.map(av => `
+              <button type="button" class="avatar-option-btn ${av === currentAvatar ? 'active' : ''}" data-avatar="${av}">
+                ${av}
+              </button>
+            `).join('')}
+          </div>
+        </div>
+
+        <button class="primary-cta-btn full-width-btn" id="auth-pseudo-submit-btn">
+          ✅ Enregistrer &amp; Synchroniser mon profil
+        </button>
+      </div>
+
+      <!-- OPTION B: Email / Password or Google via Firebase Auth -->
+      <div class="auth-option-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+          <h4>🔐 Option B — Compte Cloud Firebase (Email ou Google)</h4>
+          <span class="per-tag">${cloudBadgeText}</span>
+        </div>
+
+        <div class="auth-form-grid">
+          <div class="auth-field">
+            <label for="auth-email-input">Adresse e-mail</label>
+            <input type="email" id="auth-email-input" class="auth-input" placeholder="eleve@edu-vd.ch" value="${u?.email || ''}" />
+          </div>
+          <div class="auth-field">
+            <label for="auth-password-input">Mot de passe</label>
+            <input type="password" id="auth-password-input" class="auth-input" placeholder="••••••••" />
+          </div>
+        </div>
+
+        <div id="auth-feedback-msg" style="font-size:0.78rem; font-weight:700; color:var(--accent-primary); display:none;"></div>
+
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="secondary-btn compact-btn" id="auth-email-signin-btn">Connexion Email</button>
+          <button class="secondary-btn compact-btn" id="auth-email-signup-btn">Créer un compte</button>
+          <button class="secondary-btn compact-btn" id="auth-google-btn" style="margin-left:auto;">
+            🌐 Continuer avec Google
+          </button>
+        </div>
+      </div>
+    `;
+
+    backdrop.classList.add('open');
+
+    let pickedAvatar = currentAvatar;
+    content.querySelectorAll('.avatar-option-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        pickedAvatar = btn.dataset.avatar;
+        content.querySelectorAll('.avatar-option-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.avatar === pickedAvatar);
+        });
+      });
+    });
+
+    const showMsg = (txt, isError = false) => {
+      const msgEl = content.querySelector('#auth-feedback-msg');
+      if (!msgEl) return;
+      msgEl.style.display = 'block';
+      msgEl.style.color = isError ? 'var(--accent-danger)' : 'var(--accent-primary)';
+      msgEl.textContent = txt;
+    };
+
+    content.querySelector('#close-auth-modal-btn')?.addEventListener('click', () => {
+      backdrop.classList.remove('open');
+    });
+
+    content.querySelector('#auth-pseudo-submit-btn')?.addEventListener('click', async () => {
+      const pseudoVal = content.querySelector('#auth-pseudo-input')?.value.trim() || 'Élève 11e VP';
+      const schoolVal = content.querySelector('#auth-school-select')?.value || 'Canton de Vaud';
+      if (this.firebaseService) {
+        await this.firebaseService.signInWithPseudo(pseudoVal, schoolVal, pickedAvatar);
+        this.syncStateToCloud();
+      }
+      backdrop.classList.remove('open');
+    });
+
+    content.querySelector('#auth-signout-btn')?.addEventListener('click', async () => {
+      if (this.firebaseService) {
+        await this.firebaseService.signOutUser();
+      }
+      backdrop.classList.remove('open');
+    });
+
+    content.querySelector('#auth-email-signup-btn')?.addEventListener('click', async () => {
+      const email = content.querySelector('#auth-email-input')?.value.trim();
+      const pass = content.querySelector('#auth-password-input')?.value;
+      const pseudoVal = content.querySelector('#auth-pseudo-input')?.value.trim() || (email ? email.split('@')[0] : 'Élève 11e VP');
+      const schoolVal = content.querySelector('#auth-school-select')?.value || 'Canton de Vaud';
+      if (!email || !pass) {
+        showMsg('Renseigne ton email et un mot de passe (min. 6 caractères).', true);
+        return;
+      }
+      try {
+        await this.firebaseService.signUpWithEmail(email, pass, pseudoVal, schoolVal, pickedAvatar);
+        this.syncStateToCloud();
+        backdrop.classList.remove('open');
+      } catch (err) {
+        showMsg(err.message, true);
+      }
+    });
+
+    content.querySelector('#auth-email-signin-btn')?.addEventListener('click', async () => {
+      const email = content.querySelector('#auth-email-input')?.value.trim();
+      const pass = content.querySelector('#auth-password-input')?.value;
+      if (!email || !pass) {
+        showMsg('Renseigne ton email et ton mot de passe.', true);
+        return;
+      }
+      try {
+        await this.firebaseService.signInWithEmail(email, pass);
+        backdrop.classList.remove('open');
+      } catch (err) {
+        showMsg(err.message, true);
+      }
+    });
+
+    content.querySelector('#auth-google-btn')?.addEventListener('click', async () => {
+      try {
+        await this.firebaseService.signInWithGoogle();
+        backdrop.classList.remove('open');
+      } catch (err) {
+        showMsg(err.message, true);
+      }
+    });
+  }
+
+  /* ------------------------------------------------------------------------
+     Single-Focus Progressive Disclosure Navigation (4 Clean Views)
+     ------------------------------------------------------------------------ */
+  switchView(viewName) {
+    this.state.activeView = viewName;
+
+    document.querySelectorAll('.main-tab[data-view]').forEach(tab => {
+      const isSelected = tab.dataset.view === viewName;
+      tab.classList.toggle('active', isSelected);
+      tab.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+    });
+
+    document.querySelectorAll('.app-view[data-view-panel]').forEach(panel => {
+      panel.classList.toggle('active', panel.dataset.viewPanel === viewName);
+    });
+
+    if (viewName !== 'entrainement' && this.state.sprintTimer) {
+      clearInterval(this.state.sprintTimer);
+      this.state.sprintTimer = null;
+      const badge = document.getElementById('sprint-timer-badge');
+      if (badge) badge.style.display = 'none';
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  /* ------------------------------------------------------------------------
      Theme / Vibe Parametrization
      ------------------------------------------------------------------------ */
-  applyVibe(vibeName) {
+  applyVibe(vibeName, shouldSync = true) {
     this.state.vibe = vibeName;
     localStorage.setItem('vaud_vibe', vibeName);
     document.documentElement.setAttribute('data-vibe', vibeName);
 
     const vibeDescriptions = {
       academic: {
-        badge: '🇨🇭 Canton de Vaud • 11e VP',
-        title: 'Objectif Gymnase — Espace Révision PER',
-        subtitle: 'Entraîne-toi gratuitement sur le programme officiel vaudois (PER) avec Aide-Mémoire, répétition espacée et Coach IA.'
+        badge: '🇨🇭 11e VP Vaud • PER',
+        title: 'Prêt pour ta session 11e VP ?',
+        subtitle: 'Révise étape par étape les 7 chapitres officiels vaudois (PER) à ton rythme, avec ton Coach IA toujours à côté.'
       },
       quest: {
         badge: '🗺️ Quête du Léman • 11e VP',
-        title: 'L’Odyssée du Certificat : De Nyon à Montreux',
-        subtitle: 'Gagne des XP à chaque gare vaudoise pour débloquer le Boss Final du Certificat 11e VP !'
+        title: 'L’Odyssée du Certificat : Nyon → Montreux',
+        subtitle: 'Gagne des XP à chaque gare vaudoise pour débloquer l’étape finale du Certificat 11e VP !'
       },
       studio: {
         badge: '⚡ Focus Studio • PER L1/L2',
-        title: 'Session Haute Concentration — Certificat VP',
-        subtitle: 'Utilise les raccourcis clavier [1-4] pour enchaîner les analyses syntaxiques et optimiser ton score de maîtrise.'
+        title: 'Session Haute Concentration — 11e VP',
+        subtitle: 'Utilise les raccourcis clavier [1-4] pour enchaîner les analyses syntaxiques sans jamais défiler.'
       }
     };
 
@@ -90,8 +410,13 @@ class ObjectifGymnaseApp {
     if (heroTitle) heroTitle.textContent = info.title;
     if (heroSubtitle) heroSubtitle.textContent = info.subtitle;
 
+    document.querySelectorAll('[data-pick-vibe]').forEach(card => {
+      card.classList.toggle('active', card.dataset.pickVibe === vibeName);
+    });
+
     this.renderQuestMap();
     this.renderStudioMetrics();
+    if (shouldSync) this.syncStateToCloud();
   }
 
   /* ------------------------------------------------------------------------
@@ -107,40 +432,44 @@ class ObjectifGymnaseApp {
   }
 
   /* ------------------------------------------------------------------------
-     Render Orchestration
+     Render Orchestration Across Views
      ------------------------------------------------------------------------ */
   renderAll() {
-    this.renderHeaderStats();
+    this.renderAuthHeaderPill();
+    this.renderHeaderAndReadiness();
     this.renderSubjectTabs();
-    this.renderSidebarModules();
     this.renderQuestMap();
     this.renderStudioMetrics();
     this.renderModuleGrid();
+    this.renderLessonChapterSelect();
     this.renderArena();
-    this.renderLeaderboard();
+    this.renderDefisAndFamilyView();
+    this.renderSettingsView();
   }
 
-  renderHeaderStats() {
-    document.getElementById('stat-xp').textContent = `${this.state.xp} XP`;
-    document.getElementById('stat-streak').textContent = `${this.state.streak} j. série`;
+  renderHeaderAndReadiness() {
+    const xpEl = document.getElementById('stat-xp');
+    const streakEl = document.getElementById('stat-streak');
+    if (xpEl) xpEl.textContent = `${this.state.xp} XP`;
+    if (streakEl) streakEl.textContent = `${this.state.streak} j.`;
 
     const visibleModules = this.getVisibleModulesForSubject('francais');
     const totalQ = visibleModules.reduce((acc, m) => acc + m.questions.length, 0);
     const summaryEl = document.getElementById('active-focus-summary');
     if (summaryEl) {
-      summaryEl.textContent = `Focus : ${visibleModules.length}/${CURRICULUM_DATA.francais.modules.length} chapitres PER (${totalQ} ex. + Générateur infini)`;
+      summaryEl.textContent = `Focus actif : ${visibleModules.length}/${CURRICULUM_DATA.francais.modules.length} chapitres PER (${totalQ} exercices)`;
     }
 
     const mistakesPill = document.getElementById('mistakes-mode-pill');
     if (mistakesPill) {
-      mistakesPill.textContent = `🔁 Mes erreurs (${this.state.mistakeQuestions.length})`;
+      mistakesPill.textContent = `🔁 Erreurs (${this.state.mistakeQuestions.length})`;
     }
 
     const pct = Math.min(100, Math.round((this.state.xp / 600) * 100));
     const fill = document.getElementById('readiness-bar-fill');
     const lbl = document.getElementById('readiness-pct-label');
     if (fill) fill.style.width = `${pct}%`;
-    if (lbl) lbl.textContent = `${pct}% prêt pour le Certificat (${this.state.xp} / 600 XP)`;
+    if (lbl) lbl.textContent = `${pct}% prêt (${this.state.xp} / 600 XP)`;
   }
 
   renderSubjectTabs() {
@@ -148,12 +477,11 @@ class ObjectifGymnaseApp {
     if (!container) return;
 
     const subjectMeta = [
-      { id: 'francais', label: '📘 Français' },
-      { id: 'allemand', label: '🇩🇪 Allemand (Aperçu)' }
+      { id: 'francais', label: '📘 Français 11e VP' },
+      { id: 'allemand', label: '🇩🇪 Allemand 11e VP (Aperçu)' }
     ];
 
     const activeList = subjectMeta.filter(s => this.state.enabledSubjects.includes(s.id));
-    container.style.gridTemplateColumns = activeList.length === 1 ? '1fr' : '1fr 1fr';
 
     container.innerHTML = activeList.map(s => `
       <button class="subject-tab ${this.state.subject === s.id ? 'active' : ''}" data-subject="${s.id}">
@@ -207,74 +535,70 @@ class ObjectifGymnaseApp {
 
     const sorted = [...this.state.leaderboard].sort((a, b) => b.xp - a.xp);
     const myRank = sorted.findIndex(r => r.isMe) + 1;
-    if (rankEl) rankEl.textContent = `#${myRank} Vaud`;
+    if (rankEl) rankEl.textContent = `#${myRank || 2} Vaud`;
   }
 
-  renderSidebarModules() {
-    const visibleModules = this.getVisibleModulesForSubject();
-    const navContainer = document.getElementById('module-nav-list');
-    if (!navContainer) return;
-
-    if (!visibleModules.some(m => m.id === this.state.activeModuleId)) {
-      this.state.activeModuleId = visibleModules[0]?.id;
-    }
-
-    navContainer.innerHTML = visibleModules.map(mod => {
-      const isActive = mod.id === this.state.activeModuleId;
-      return `
-        <button class="nav-item ${isActive ? 'active' : ''}" data-module-id="${mod.id}">
-          <span class="nav-item-left">
-            <span>${mod.icon}</span>
-            <span>${mod.title.split('(')[0].trim()}</span>
-          </span>
-          <span class="nav-badge">${mod.questions.length} Q</span>
-        </button>
-      `;
-    }).join('');
-
-    navContainer.querySelectorAll('.nav-item').forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.selectModule(btn.dataset.moduleId);
-      });
-    });
-  }
-
+  /* ------------------------------------------------------------------------
+     VIEW 1: 📚 Parcours — Active Focused PER Chapters Grid
+     ------------------------------------------------------------------------ */
   renderModuleGrid() {
     const visibleModules = this.getVisibleModulesForSubject();
     const grid = document.getElementById('modules-overview-grid');
     if (!grid) return;
 
-    grid.innerHTML = visibleModules.map(mod => `
-      <div class="module-card" data-module-card="${mod.id}">
-        <div>
-          <div class="module-card-top">
-            <div class="module-icon">${mod.icon}</div>
-            <span class="per-tag">${mod.perRef}</span>
+    if (!visibleModules.some(m => m.id === this.state.activeModuleId)) {
+      this.state.activeModuleId = visibleModules[0]?.id;
+    }
+
+    grid.innerHTML = visibleModules.map(mod => {
+      const isCurrent = mod.id === this.state.activeModuleId;
+      return `
+        <article class="module-card ${isCurrent ? 'active-chapter' : ''}" data-module-card="${mod.id}">
+          <div>
+            <div class="module-card-top">
+              <div class="module-icon">${mod.icon}</div>
+              <span class="per-tag">${mod.perRef}</span>
+            </div>
+            <h3>${mod.title}</h3>
+            <p>${mod.description}</p>
           </div>
-          <h3 style="margin-top: 12px;">${mod.title}</h3>
-          <p>${mod.description}</p>
-        </div>
-        <div class="module-card-footer">
-          <span>📍 Étape : ${mod.station} • ${mod.questions.length} exercices</span>
-          <span class="play-link">S’entraîner →</span>
-        </div>
-      </div>
-    `).join('');
+          <div class="module-card-footer">
+            <span>📍 ${mod.station} • ${mod.questions.length} exercices</span>
+            <span class="train-chapter-btn">S’entraîner →</span>
+          </div>
+        </article>
+      `;
+    }).join('');
 
     grid.querySelectorAll('.module-card').forEach(card => {
       card.addEventListener('click', () => {
-        this.selectModule(card.dataset.moduleCard);
-        document.getElementById('arena-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        this.selectModuleAndStart(card.dataset.moduleCard);
       });
     });
   }
 
-  selectModule(moduleId) {
+  renderLessonChapterSelect() {
+    const selectEl = document.getElementById('lesson-chapter-select');
+    if (!selectEl) return;
+
+    const visibleModules = this.getVisibleModulesForSubject();
+    selectEl.innerHTML = visibleModules.map(mod => `
+      <option value="${mod.id}" ${mod.id === this.state.activeModuleId ? 'selected' : ''}>
+        ${mod.icon} ${mod.title.split('(')[0].trim()}
+      </option>
+    `).join('');
+  }
+
+  selectModuleAndStart(moduleId) {
     this.state.activeModuleId = moduleId;
     this.state.currentQuestionIndex = 0;
     this.state.answeredCurrent = false;
-    this.renderSidebarModules();
+    this.state.theoryOpen = false;
+    this.renderModuleGrid();
+    this.renderLessonChapterSelect();
     this.renderArena();
+    this.renderDefisAndFamilyView();
+    this.switchView('entrainement');
   }
 
   getActiveModule() {
@@ -295,28 +619,7 @@ class ObjectifGymnaseApp {
   }
 
   /* ------------------------------------------------------------------------
-     Infinite Exercise Generator Action
-     ------------------------------------------------------------------------ */
-  generateAndOpenNewExercise() {
-    const mod = this.getActiveModule();
-    if (!mod || !PERExerciseGenerator) return;
-
-    const newQ = PERExerciseGenerator.generateForModule(mod.id);
-    mod.questions.push(newQ);
-    this.state.exerciseMode = 'all';
-    document.querySelectorAll('.mode-pill[data-mode]').forEach(p => {
-      p.classList.toggle('active', p.dataset.mode === 'all');
-    });
-
-    this.state.currentQuestionIndex = mod.questions.length - 1;
-    this.renderHeaderStats();
-    this.renderSidebarModules();
-    this.renderModuleGrid();
-    this.renderArena();
-  }
-
-  /* ------------------------------------------------------------------------
-     Interactive Exercise Arena + Official PER Theory Sheet
+     VIEW 2: 🎯 Entraînement — Zero-Scroll Lesson Frame & Popover Theory Sheet
      ------------------------------------------------------------------------ */
   renderTheoryDrawer() {
     const mod = this.getActiveModule();
@@ -335,20 +638,29 @@ class ObjectifGymnaseApp {
 
   renderArena() {
     const mod = this.getActiveModule();
+    if (!mod) return;
+
     const questions = this.getFilteredQuestions();
     const idx = this.state.currentQuestionIndex % questions.length;
     const q = questions[idx];
     this.currentQuestion = q;
     this.state.answeredCurrent = false;
 
-    document.getElementById('arena-module-title').textContent = `${mod.icon} ${mod.title}`;
-    document.getElementById('arena-per-ref').textContent = mod.perRef;
+    const titleEl = document.getElementById('arena-module-title');
+    const refEl = document.getElementById('arena-per-ref');
+    if (titleEl) titleEl.textContent = `${mod.icon} ${mod.title.split('(')[0].trim()}`;
+    if (refEl) refEl.textContent = mod.perRef;
 
-    const modeTag = this.state.exerciseMode === 'mistakes'
-      ? '• 🔁 Mode Répétition Espacée (Mes erreurs)'
-      : (q.isGenerated ? '• ✨ Générée dynamiquement' : '');
-    document.getElementById('question-counter').textContent = `Question ${idx + 1} sur ${questions.length} ${modeTag}`;
-    document.getElementById('question-prompt').textContent = q.prompt;
+    const modeBadge = this.state.exerciseMode === 'mistakes'
+      ? ' • 🔁 Erreurs'
+      : (q.isGenerated ? ' • ✨ Généré' : '');
+    const counterEl = document.getElementById('question-counter');
+    if (counterEl) {
+      counterEl.textContent = `Question ${idx + 1} / ${questions.length}${modeBadge}`;
+    }
+
+    const promptEl = document.getElementById('question-prompt');
+    if (promptEl) promptEl.textContent = q.prompt;
 
     this.renderTheoryDrawer();
 
@@ -357,7 +669,7 @@ class ObjectifGymnaseApp {
     const optionsContainer = document.getElementById('options-container');
     const feedbackBanner = document.getElementById('feedback-banner');
 
-    feedbackBanner.classList.remove('visible');
+    if (feedbackBanner) feedbackBanner.classList.remove('visible');
 
     if (q.type === 'surgery') {
       showcaseEl.style.display = 'none';
@@ -420,24 +732,22 @@ class ObjectifGymnaseApp {
       this.state.xp += gainedXp;
       this.state.correctCount += 1;
 
-      // Remove from Spaced Repetition Mistake Queue if mastered
       const beforeLen = this.state.mistakeQuestions.length;
       this.state.mistakeQuestions = this.state.mistakeQuestions.filter(item => item.id !== this.currentQuestion.id);
       localStorage.setItem('vaud_mistake_questions', JSON.stringify(this.state.mistakeQuestions));
 
       const clearedNote = beforeLen > this.state.mistakeQuestions.length
-        ? ' • 🎯 Erreur maîtrisée et retirée de ta liste !'
+        ? ' • 🎯 Retiré de « Mes erreurs » !'
         : '';
-      feedbackTitle.innerHTML = `✅ Excellent ! +${gainedXp} XP (Conforme au PER Vaud)${clearedNote}`;
+      feedbackTitle.innerHTML = `✅ Excellent ! +${gainedXp} XP${clearedNote}`;
       feedbackTitle.style.color = '#10b981';
     } else {
       clickedEl.classList.add('wrong');
-      // Add to Spaced Repetition Mistake Queue if not already present
       if (!this.state.mistakeQuestions.some(item => item.id === this.currentQuestion.id)) {
         this.state.mistakeQuestions.push(this.currentQuestion);
         localStorage.setItem('vaud_mistake_questions', JSON.stringify(this.state.mistakeQuestions));
       }
-      feedbackTitle.innerHTML = `❌ Pas tout à fait — Ajouté à « 🔁 Mes erreurs » pour révision espacée :`;
+      feedbackTitle.innerHTML = `❌ Pas tout à fait — Ajouté à « 🔁 Erreurs » :`;
       feedbackTitle.style.color = '#f43f5e';
     }
 
@@ -449,15 +759,23 @@ class ObjectifGymnaseApp {
     localStorage.setItem('vaud_correct', String(this.state.correctCount));
 
     const meRow = this.state.leaderboard.find(r => r.isMe);
-    if (meRow) meRow.xp = this.state.xp;
+    if (meRow) {
+      meRow.xp = this.state.xp;
+      if (this.state.currentUser) {
+        meRow.name = `${this.state.currentUser.pseudo} (${this.state.currentUser.etablissement || 'Vaud'})`;
+        meRow.avatar = this.state.currentUser.avatar || '⚡';
+      }
+    }
 
-    this.renderHeaderStats();
+    this.syncStateToCloud();
+    this.renderHeaderAndReadiness();
     this.renderQuestMap();
     this.renderStudioMetrics();
-    this.renderLeaderboard();
+    this.renderDefisAndFamilyView();
   }
 
   nextQuestion() {
+    this.state.theoryOpen = false;
     if (this.state.exerciseMode === 'mistakes' && this.state.mistakeQuestions.length === 0) {
       this.state.exerciseMode = 'all';
       document.querySelectorAll('.mode-pill[data-mode]').forEach(p => {
@@ -469,10 +787,26 @@ class ObjectifGymnaseApp {
     this.renderArena();
   }
 
-  /* ------------------------------------------------------------------------
-     Sprint Chrono 60s Mode
-     ------------------------------------------------------------------------ */
+  generateAndOpenNewExercise() {
+    const mod = this.getActiveModule();
+    if (!mod || !PERExerciseGenerator) return;
+
+    this.state.theoryOpen = false;
+    const newQ = PERExerciseGenerator.generateForModule(mod.id);
+    mod.questions.push(newQ);
+    this.state.exerciseMode = 'all';
+    document.querySelectorAll('.mode-pill[data-mode]').forEach(p => {
+      p.classList.toggle('active', p.dataset.mode === 'all');
+    });
+
+    this.state.currentQuestionIndex = mod.questions.length - 1;
+    this.renderHeaderAndReadiness();
+    this.renderModuleGrid();
+    this.renderArena();
+  }
+
   startSprintMode() {
+    this.switchView('entrainement');
     this.state.exerciseMode = 'sprint';
     this.state.sprintSecondsLeft = 60;
     document.querySelectorAll('.mode-pill[data-mode]').forEach(p => {
@@ -480,285 +814,136 @@ class ObjectifGymnaseApp {
     });
 
     const timerBadge = document.getElementById('sprint-timer-badge');
-    timerBadge.style.display = 'inline-flex';
-    timerBadge.textContent = `⏱️ 60s`;
+    if (timerBadge) {
+      timerBadge.style.display = 'inline-flex';
+      timerBadge.textContent = `⏱️ 60s`;
+    }
 
     if (this.state.sprintTimer) clearInterval(this.state.sprintTimer);
     this.state.sprintTimer = setInterval(() => {
       this.state.sprintSecondsLeft -= 1;
-      timerBadge.textContent = `⏱️ ${this.state.sprintSecondsLeft}s`;
+      if (timerBadge) timerBadge.textContent = `⏱️ ${this.state.sprintSecondsLeft}s`;
       if (this.state.sprintSecondsLeft <= 0) {
         clearInterval(this.state.sprintTimer);
-        timerBadge.textContent = `🏁 Sprint terminé !`;
+        if (timerBadge) timerBadge.textContent = `🏁 Terminé !`;
       }
     }, 1000);
 
     this.renderArena();
-    document.getElementById('arena-section')?.scrollIntoView({ behavior: 'smooth' });
   }
 
   /* ------------------------------------------------------------------------
-     Leaderboard & Unified Modals (Settings + Roadmap/Backlog + Duel + Family)
+     VIEW 3: 🏆 Défis & Famille
      ------------------------------------------------------------------------ */
-  renderLeaderboard() {
+  renderDefisAndFamilyView() {
     const listEl = document.getElementById('leaderboard-list');
-    if (!listEl) return;
-
-    const sorted = [...this.state.leaderboard].sort((a, b) => b.xp - a.xp);
-    listEl.innerHTML = sorted.map((user, idx) => `
-      <div class="leader-row ${user.isMe ? 'me' : ''}">
-        <div class="leader-left">
-          <span class="rank-num">${idx + 1}</span>
-          <span>${user.avatar} ${user.name}</span>
+    if (listEl) {
+      const sorted = [...this.state.leaderboard].sort((a, b) => b.xp - a.xp);
+      listEl.innerHTML = sorted.map((user, idx) => `
+        <div class="leader-row ${user.isMe ? 'me' : ''}">
+          <div class="leader-left">
+            <span class="rank-num">${idx + 1}</span>
+            <span>${user.avatar} ${user.name}</span>
+          </div>
+          <span>${user.xp} XP</span>
         </div>
-        <span>${user.xp} XP</span>
-      </div>
-    `).join('');
-  }
+      `).join('');
+    }
 
-  openModal(type) {
-    const backdrop = document.getElementById('social-modal-backdrop');
-    const content = document.getElementById('social-modal-content');
-    if (!backdrop || !content) return;
+    const cloudBadgeEl = document.getElementById('leaderboard-cloud-badge');
+    if (cloudBadgeEl) {
+      cloudBadgeEl.textContent = this.state.isCloudConnected ? '☁️ Temps réel Vaud' : 'Canton de Vaud';
+    }
+
+    const activeMod = this.getActiveModule();
+    const shortChapter = activeMod ? activeMod.title.split('(')[0].trim() : 'Programme PER';
+
+    const duelChapEl = document.getElementById('duel-active-chapter');
+    const duelCodeEl = document.getElementById('duel-challenge-code');
+    const duelXpEl = document.getElementById('duel-xp-target');
+    if (duelChapEl) duelChapEl.textContent = shortChapter;
+    if (duelCodeEl) duelCodeEl.textContent = this.state.duelCode;
+    if (duelXpEl) duelXpEl.textContent = `${this.state.xp} XP`;
 
     const accuracy = this.state.answeredCount > 0
       ? Math.round((this.state.correctCount / this.state.answeredCount) * 100)
       : 100;
 
-    if (type === 'roadmap') {
-      content.innerHTML = `
-        <h3 style="font-size:1.22rem; font-weight:800;">📋 Suivi des Versions & Backlog (v1.1.0)</h3>
-        <p style="font-size:0.84rem; color:var(--text-secondary); margin-top:4px;">
-          Plateforme 100% gratuite et open-source dédiée aux élèves de 11e VP du Canton de Vaud.
-        </p>
+    const famHeadingEl = document.getElementById('family-student-heading');
+    const famChapEl = document.getElementById('family-active-chapter');
+    const famXpEl = document.getElementById('family-stat-xp');
+    const famAccEl = document.getElementById('family-stat-acc');
+    const famStreakEl = document.getElementById('family-stat-streak');
 
-        <div class="settings-section">
-          <h4>✅ Livré dans la version actuelle (v1.1.0)</h4>
-          <ul class="theory-points-list" style="margin-top:8px;">
-            <li><strong>6 Chapitres Officiels Français 11e VP (PER L1 31-38)</strong> : Subordonnées, Fonctions PER (CP/CDV/CIV), Discours rapporté, Conjugaison & Valeurs des temps, Figures de style, Texte argumentatif.</li>
-            <li><strong>📖 Aide-Mémoire PER intégré (Inspiré de Khan Academy)</strong> : Fiche de théorie officielle consultable en 1 clic pendant chaque exercice.</li>
-            <li><strong>🔁 Répétition Espacée « Mes erreurs » (Inspiré d’Anki / Projet Voltaire)</strong> : File d’attente automatique des questions ratées jusqu’à maîtrise complète.</li>
-            <li><strong>⚙️ Paramètres & Focus Personnalisé</strong> : Choix du thème visuel (Neo-Academic, Quest Map, Focus Studio), activation de l’Allemand (aperçu) et filtrage des chapitres ciblés.</li>
-            <li><strong>✨ Générateur Procédural Infini + Coach IA Gratuit</strong> : Création d’exercices à la volée et diagnostic de paragraphes argumentatifs.</li>
-          </ul>
-        </div>
+    if (famHeadingEl) {
+      famHeadingEl.textContent = this.state.currentUser
+        ? `${this.state.currentUser.avatar || '⚡'} Bilan de ${this.state.currentUser.pseudo} (${this.state.currentUser.etablissement})`
+        : 'Objectif Gymnase — Programme PER';
+    }
+    if (famChapEl) famChapEl.textContent = `Chapitre actif : ${shortChapter}`;
+    if (famXpEl) famXpEl.textContent = `${this.state.xp} XP`;
+    if (famAccEl) famAccEl.textContent = `${accuracy}%`;
+    if (famStreakEl) famStreakEl.textContent = `🔥 ${this.state.streak} j.`;
+  }
 
-        <div class="settings-section">
-          <h4>🚀 Backlog Priorisé (Prochaines Versions)</h4>
-          <ul class="theory-points-list" style="margin-top:8px;">
-            <li><strong>v1.2.0 — Mode « Examen Blanc du Certificat Vaud »</strong> : Simulation complète chronométrée (texte littéraire + questions de compréhension + rédaction argumentative guidée).</li>
-            <li><strong>v1.3.0 — Module Orthographe & Dictée Interactive PER</strong> : Accord du participe passé (être, avoir, verbes pronominaux) et homophones grammaticaux.</li>
-            <li><strong>v1.4.0 — Programme Complet Allemand 11e VP (PER L2)</strong> : Präteritum, Perfekt, Passiv, Relativsätze et vocabulaire thématique officiel.</li>
-            <li><strong>v1.5.0 — Mode Multijoueur Temps Réel & Classement Inter-Collèges Vaudois</strong> : Défis en direct par lien partagé sans inscription obligatoire.</li>
-          </ul>
-        </div>
-
-        <div style="display:flex; justify-content:flex-end; margin-top:18px;">
-          <button class="quick-sprint-btn" id="close-modal-btn">Fermer</button>
-        </div>
-      `;
-    } else if (type === 'settings') {
-      const allFrModules = CURRICULUM_DATA.francais.modules;
-      const isDeEnabled = this.state.enabledSubjects.includes('allemand');
-
-      content.innerHTML = `
-        <h3 style="font-size:1.22rem; font-weight:800;">⚙️ Paramètres & Programme Personnalisé</h3>
-        <p style="font-size:0.84rem; color:var(--text-secondary); margin-top:4px;">
-          Personnalise l’apparence de ton application, tes branches actives et les chapitres du PER sur lesquels tu veux te concentrer.
-        </p>
-
-        <!-- 1. THEME / VIBE PARAMETRIZATION -->
-        <div class="settings-section">
-          <h4>🎨 1. Thème visuel de l’application</h4>
-          <p>Choisis l’ambiance qui te motive le plus pour réviser :</p>
-          <div class="theme-cards-grid">
-            <button class="theme-choice-card ${this.state.vibe === 'academic' ? 'active' : ''}" data-pick-vibe="academic">
-              <strong>🏛️ Neo-Academic</strong>
-              <span>Émeraude vaudois & papier clair</span>
-            </button>
-            <button class="theme-choice-card ${this.state.vibe === 'quest' ? 'active' : ''}" data-pick-vibe="quest">
-              <strong>🗺️ Vaud Quest Map</strong>
-              <span>Carte RPG Nyon → Montreux</span>
-            </button>
-            <button class="theme-choice-card ${this.state.vibe === 'studio' ? 'active' : ''}" data-pick-vibe="studio">
-              <strong>⚡ Focus Studio</strong>
-              <span>Mode sombre & raccourcis clavier</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- 2. SUBJECTS PARAMETRIZATION -->
-        <div class="settings-section">
-          <h4>📚 2. Branches d’étude (11e VP Vaud)</h4>
-          <p>Active ou masque les branches dans ta barre latérale :</p>
-          <div class="focus-checklist">
-            <label class="focus-check-item">
-              <span class="focus-check-left">
-                <input type="checkbox" checked disabled />
-                <span>📘 Français 11e VP (Programme complet PER L1)</span>
-              </span>
-              <span class="per-tag">Principal</span>
-            </label>
-            <label class="focus-check-item">
-              <span class="focus-check-left">
-                <input type="checkbox" id="toggle-german-subj" ${isDeEnabled ? 'checked' : ''} />
-                <span>🇩🇪 Allemand 11e VP (PER L2 — Nebensätze, Perfekt)</span>
-              </span>
-              <span class="placeholder-pill">Option / Aperçu</span>
-            </label>
-          </div>
-        </div>
-
-        <!-- 3. TOPIC FOCUS PARAMETRIZATION -->
-        <div class="settings-section">
-          <h4>🎯 3. Chapitres ciblés en Français (Focus du moment)</h4>
-          <p>Coche uniquement les sujets de ton prochain test ou du Certificat :</p>
-          <div class="focus-checklist" id="focus-topics-checklist">
-            ${allFrModules.map(mod => {
-              const checked = this.state.focusedModules.includes(mod.id);
-              return `
-                <label class="focus-check-item">
-                  <span class="focus-check-left">
-                    <input type="checkbox" class="focus-topic-cb" value="${mod.id}" ${checked ? 'checked' : ''} />
-                    <span>${mod.icon} ${mod.title}</span>
-                  </span>
-                  <span class="per-tag">${mod.questions.length} ex.</span>
-                </label>
-              `;
-            }).join('')}
-          </div>
-        </div>
-
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; padding-top:14px; border-top:1px solid var(--border-color);">
-          <span style="font-size:0.76rem; color:var(--text-muted);">Version ${window.APP_VERSION || 'v1.1.0'} • Sauvegarde locale auto</span>
-          <button class="quick-sprint-btn" id="close-modal-btn">✅ Appliquer & Continuer</button>
-        </div>
-      `;
-
-      content.querySelectorAll('[data-pick-vibe]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const picked = btn.dataset.pickVibe;
-          this.applyVibe(picked);
-          content.querySelectorAll('[data-pick-vibe]').forEach(b => {
-            b.classList.toggle('active', b.dataset.pickVibe === picked);
-          });
-        });
-      });
-
-      content.querySelector('#toggle-german-subj')?.addEventListener('change', (e) => {
-        if (e.currentTarget.checked) {
-          if (!this.state.enabledSubjects.includes('allemand')) {
-            this.state.enabledSubjects.push('allemand');
-          }
-        } else {
-          this.state.enabledSubjects = this.state.enabledSubjects.filter(s => s !== 'allemand');
-          if (this.state.subject === 'allemand') {
-            this.state.subject = 'francais';
-          }
-        }
-        localStorage.setItem('vaud_enabled_subjects', JSON.stringify(this.state.enabledSubjects));
-        this.renderAll();
-      });
-
-      content.querySelectorAll('.focus-topic-cb').forEach(cb => {
-        cb.addEventListener('change', () => {
-          const selected = Array.from(content.querySelectorAll('.focus-topic-cb:checked')).map(el => el.value);
-          if (selected.length === 0) {
-            cb.checked = true;
-            return;
-          }
-          this.state.focusedModules = selected;
-          localStorage.setItem('vaud_focused_customized', 'true');
-          localStorage.setItem('vaud_focused_modules', JSON.stringify(selected));
-          this.renderAll();
-        });
-      });
-
-    } else if (type === 'family') {
-      content.innerHTML = `
-        <h3 style="font-size:1.2rem; font-weight:800;">👨‍👩‍👧‍👦 Partager mon bilan avec ma famille</h3>
-        <p style="font-size:0.85rem; color:var(--text-secondary); margin-top:4px;">
-          Envoie cette carte récapitulative sur WhatsApp ou iMessage pour montrer ta progression vers le Certificat 11e VP.
-        </p>
-        <div class="family-share-preview">
-          <div style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em; opacity:0.85;">
-            🇨🇭 Bilan Hebdomadaire • 11e VP Canton de Vaud
-          </div>
-          <h4>Objectif Gymnase — Français & Allemand</h4>
-          <p style="font-size:0.82rem; opacity:0.9;">Chapitre actif : ${this.getActiveModule().title}</p>
-          <div class="family-share-grid">
-            <div class="family-stat-box">
-              <strong>${this.state.xp} XP</strong>
-              <span>Points d'étude</span>
-            </div>
-            <div class="family-stat-box">
-              <strong>${accuracy}%</strong>
-              <span>Réussite PER</span>
-            </div>
-            <div class="family-stat-box">
-              <strong>🔥 ${this.state.streak} j.</strong>
-              <span>Série régulière</span>
-            </div>
-          </div>
-        </div>
-        <div style="display:flex; gap:10px; justify-content:flex-end;">
-          <button class="secondary-btn" id="close-modal-btn">Fermer</button>
-          <button class="quick-sprint-btn" id="copy-family-msg-btn">📲 Copier pour WhatsApp / Famille</button>
-        </div>
-      `;
-
-      content.querySelector('#copy-family-msg-btn')?.addEventListener('click', (e) => {
-        const shareText = `🇨🇭 Bilan 11e VP (Objectif Gymnase) :\n✅ ${this.state.xp} XP gagnés\n🎯 ${accuracy}% de réussite sur le programme PER (${this.getActiveModule().title})\n🔥 Série de ${this.state.streak} jours consécutifs !`;
-        navigator.clipboard?.writeText(shareText);
-        e.currentTarget.textContent = '✅ Copié dans le presse-papier !';
-      });
-    } else {
-      const challengeCode = `VD-11VP-${Math.floor(1000 + Math.random() * 9000)}`;
-      content.innerHTML = `
-        <h3 style="font-size:1.2rem; font-weight:800;">⚔️ Défier un ami en Duel 11e VP</h3>
-        <p style="font-size:0.85rem; color:var(--text-secondary); margin-top:4px;">
-          Ton ami recevra exactement les 5 mêmes questions sur <strong>${this.getActiveModule().title}</strong> pour voir qui obtient le meilleur score !
-        </p>
-        <div style="margin:18px 0; padding:16px; border-radius:12px; background:var(--bg-tertiary); border:1px dashed var(--accent-primary); text-align:center;">
-          <div style="font-size:0.75rem; color:var(--text-muted);">CODE DE DÉFI SYNCHRONE</div>
-          <div style="font-family:var(--font-mono); font-size:1.5rem; font-weight:800; color:var(--accent-primary); margin:6px 0;">
-            ${challengeCode}
-          </div>
-          <div style="font-size:0.78rem; color:var(--text-secondary);">
-            Score à battre : <strong>${this.state.xp} XP</strong> • Temps moyen : 14s/question
-          </div>
-        </div>
-        <div style="display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap;">
-          <button class="secondary-btn" id="close-modal-btn">Fermer</button>
-          <button class="secondary-btn" id="simulate-friend-btn">🤖 Simuler la réponse de Léo</button>
-          <button class="quick-sprint-btn" id="copy-duel-btn">🔗 Copier l'invitation Duel</button>
-        </div>
-      `;
-
-      content.querySelector('#copy-duel-btn')?.addEventListener('click', (e) => {
-        const duelText = `⚔️ Je te défie sur Objectif Gymnase (11e VP Vaud) ! Entre le code ${challengeCode} sur le chapitre "${this.getActiveModule().title}" et essaie de battre mes ${this.state.xp} XP !`;
-        navigator.clipboard?.writeText(duelText);
-        e.currentTarget.textContent = '✅ Lien de défi copié !';
-      });
-
-      content.querySelector('#simulate-friend-btn')?.addEventListener('click', (e) => {
-        this.state.xp += 30;
-        const meRow = this.state.leaderboard.find(r => r.isMe);
-        if (meRow) meRow.xp = this.state.xp;
-        this.renderHeaderStats();
-        this.renderLeaderboard();
-        e.currentTarget.textContent = '🏆 Victoire ! Tu as battu Léo (4/5 vs 3/5) → +30 XP !';
-      });
+  /* ------------------------------------------------------------------------
+     VIEW 4: ⚙️ Paramètres (Including Cloud Firebase Configuration)
+     ------------------------------------------------------------------------ */
+  renderSettingsView() {
+    const deCheckbox = document.getElementById('toggle-german-subj');
+    if (deCheckbox) {
+      deCheckbox.checked = this.state.enabledSubjects.includes('allemand');
     }
 
-    backdrop.classList.add('open');
-    content.querySelector('#close-modal-btn')?.addEventListener('click', () => {
-      backdrop.classList.remove('open');
+    const fbStatusPill = document.getElementById('firebase-status-pill');
+    if (fbStatusPill) {
+      fbStatusPill.textContent = this.state.isCloudConnected
+        ? '☁️ Cloud Firebase Connecté'
+        : '💾 Mode Local-First';
+    }
+
+    const fbInput = document.getElementById('firebase-config-input');
+    if (fbInput && window.FIREBASE_CONFIG && !fbInput.value) {
+      fbInput.value = JSON.stringify(window.FIREBASE_CONFIG, null, 2);
+    }
+
+    const checklistEl = document.getElementById('focus-topics-checklist');
+    if (!checklistEl) return;
+
+    const allFrModules = CURRICULUM_DATA.francais.modules;
+    checklistEl.innerHTML = allFrModules.map(mod => {
+      const checked = this.state.focusedModules.includes(mod.id);
+      return `
+        <label class="focus-check-item">
+          <span class="focus-check-left">
+            <input type="checkbox" class="focus-topic-cb" value="${mod.id}" ${checked ? 'checked' : ''} />
+            <span>${mod.icon} ${mod.title}</span>
+          </span>
+          <span class="per-tag">${mod.questions.length} ex.</span>
+        </label>
+      `;
+    }).join('');
+
+    checklistEl.querySelectorAll('.focus-topic-cb').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const selected = Array.from(checklistEl.querySelectorAll('.focus-topic-cb:checked')).map(el => el.value);
+        if (selected.length === 0) {
+          cb.checked = true;
+          return;
+        }
+        this.state.focusedModules = selected;
+        localStorage.setItem('vaud_focused_customized', 'true');
+        localStorage.setItem('vaud_focused_modules', JSON.stringify(selected));
+        this.syncStateToCloud();
+        this.renderHeaderAndReadiness();
+        this.renderModuleGrid();
+        this.renderLessonChapterSelect();
+      });
     });
   }
 
   /* ------------------------------------------------------------------------
-     AI Coach Chat Interactions
+     AI Coach Chat Interactions (Inside Fixed/Sticky Right Panel)
      ------------------------------------------------------------------------ */
   async sendAICoachMessage(messageText) {
     const historyEl = document.getElementById('ai-chat-history');
@@ -782,24 +967,73 @@ class ObjectifGymnaseApp {
   }
 
   /* ------------------------------------------------------------------------
-     Event Listeners & Keyboard Shortcuts
+     Global Event Listeners & Keyboard Shortcuts
      ------------------------------------------------------------------------ */
   bindGlobalEvents() {
-    // Settings & Focus Parametrization Triggers
-    ['open-settings-btn', 'sidebar-customize-btn', 'hero-settings-btn', 'filter-topics-btn'].forEach(id => {
-      document.getElementById(id)?.addEventListener('click', () => {
-        this.openModal('settings');
+    document.querySelectorAll('.main-tab[data-view]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        this.switchView(tab.dataset.view);
       });
     });
 
-    // Version & Backlog Triggers
-    ['version-pill-btn', 'footer-roadmap-btn'].forEach(id => {
+    document.getElementById('brand-home-btn')?.addEventListener('click', () => {
+      this.switchView('parcours');
+    });
+
+    document.getElementById('back-to-parcours-btn')?.addEventListener('click', () => {
+      this.switchView('parcours');
+    });
+
+    document.getElementById('continue-study-btn')?.addEventListener('click', () => {
+      this.switchView('entrainement');
+    });
+
+    ['parcours-customize-btn', 'filter-topics-btn'].forEach(id => {
       document.getElementById(id)?.addEventListener('click', () => {
-        this.openModal('roadmap');
+        this.switchView('parametres');
       });
     });
 
-    // Theory Drawer Toggle
+    // Student Profile / Auth Triggers
+    ['user-auth-pill', 'open-auth-from-settings-btn'].forEach(id => {
+      document.getElementById(id)?.addEventListener('click', () => {
+        this.openAuthModal();
+      });
+    });
+
+    document.getElementById('auth-modal-backdrop')?.addEventListener('click', (e) => {
+      if (e.target.id === 'auth-modal-backdrop') {
+        e.currentTarget.classList.remove('open');
+      }
+    });
+
+    // Save Firebase Cloud Config in Paramètres
+    document.getElementById('save-firebase-config-btn')?.addEventListener('click', (e) => {
+      const raw = document.getElementById('firebase-config-input')?.value.trim();
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed.apiKey && parsed.projectId && this.firebaseService) {
+          this.firebaseService.saveFirebaseConfig(parsed);
+        } else {
+          e.currentTarget.textContent = '⚠️ Clés apiKey / projectId manquantes';
+        }
+      } catch (err) {
+        e.currentTarget.textContent = '⚠️ Format JSON invalide';
+      }
+    });
+
+    document.getElementById('lesson-chapter-select')?.addEventListener('change', (e) => {
+      this.state.activeModuleId = e.target.value;
+      this.state.currentQuestionIndex = 0;
+      this.state.answeredCurrent = false;
+      this.state.theoryOpen = false;
+      this.renderModuleGrid();
+      this.renderArena();
+      this.renderDefisAndFamilyView();
+    });
+
+    // Popover Theory Sheet Toggle
     document.getElementById('toggle-theory-btn')?.addEventListener('click', () => {
       this.state.theoryOpen = !this.state.theoryOpen;
       this.renderTheoryDrawer();
@@ -815,7 +1049,7 @@ class ObjectifGymnaseApp {
       pill.addEventListener('click', () => {
         const mode = pill.dataset.mode;
         if (mode === 'mistakes' && this.state.mistakeQuestions.length === 0) {
-          this.sendAICoachMessage('Tu n’as aucune erreur en attente ! Continue à t’entraîner, les questions ratées s’ajouteront automatiquement ici.');
+          this.sendAICoachMessage('Tu n’as aucune erreur en attente dans « 🔁 Erreurs » ! Continue à t’entraîner, les questions ratées s’ajouteront automatiquement ici.');
           return;
         }
         if (mode === 'sprint') {
@@ -823,7 +1057,8 @@ class ObjectifGymnaseApp {
           return;
         }
         if (this.state.sprintTimer) clearInterval(this.state.sprintTimer);
-        document.getElementById('sprint-timer-badge').style.display = 'none';
+        const timerBadge = document.getElementById('sprint-timer-badge');
+        if (timerBadge) timerBadge.style.display = 'none';
 
         this.state.exerciseMode = mode;
         this.state.currentQuestionIndex = 0;
@@ -834,7 +1069,7 @@ class ObjectifGymnaseApp {
       });
     });
 
-    // Next Question, Infinite Generator & Explain Error Buttons
+    // Lesson Bottom Action Buttons
     document.getElementById('next-question-btn')?.addEventListener('click', () => {
       this.nextQuestion();
     });
@@ -851,7 +1086,7 @@ class ObjectifGymnaseApp {
       this.startSprintMode();
     });
 
-    // AI Coach Input & Quick Chips
+    // Sticky AI Coach Input & Quick Chips
     document.getElementById('ai-send-btn')?.addEventListener('click', () => {
       const val = document.getElementById('ai-user-input')?.value;
       if (val) this.sendAICoachMessage(val);
@@ -881,24 +1116,89 @@ class ObjectifGymnaseApp {
       }
     });
 
-    // Social & Family Modals
-    document.getElementById('open-duel-modal-btn')?.addEventListener('click', () => {
-      this.openModal('duel');
-    });
-
-    document.getElementById('open-family-modal-btn')?.addEventListener('click', () => {
-      this.openModal('family');
-    });
-
-    document.getElementById('social-modal-backdrop')?.addEventListener('click', (e) => {
-      if (e.target.id === 'social-modal-backdrop') {
-        e.currentTarget.classList.remove('open');
+    // View 3: Défis & Famille Actions (with Cloud Duel Creation)
+    document.getElementById('copy-duel-btn')?.addEventListener('click', async (e) => {
+      const activeMod = this.getActiveModule();
+      const modTitle = activeMod?.title || 'Programme PER';
+      if (this.firebaseService) {
+        await this.firebaseService.createCloudDuel(this.state.duelCode, activeMod?.id || 'subordonnees', modTitle, this.state.xp);
       }
+      const duelText = `⚔️ Je te défie sur Objectif Gymnase (11e VP Vaud) ! Entre le code ${this.state.duelCode} sur le chapitre "${modTitle}" et essaie de battre mes ${this.state.xp} XP !`;
+      navigator.clipboard?.writeText(duelText);
+      const btn = e.currentTarget;
+      const orig = btn.textContent;
+      btn.textContent = '✅ Invitation Duel copiée !';
+      setTimeout(() => { btn.textContent = orig; }, 2500);
     });
 
-    // Keyboard Shortcuts [1-4] for Studio Focus Speed
+    document.getElementById('simulate-friend-btn')?.addEventListener('click', (e) => {
+      this.state.xp += 30;
+      localStorage.setItem('vaud_xp', String(this.state.xp));
+      const meRow = this.state.leaderboard.find(r => r.isMe);
+      if (meRow) meRow.xp = this.state.xp;
+      this.syncStateToCloud();
+      this.renderHeaderAndReadiness();
+      this.renderDefisAndFamilyView();
+      e.currentTarget.textContent = '🏆 Victoire contre Léo (4/5 vs 3/5) → +30 XP !';
+    });
+
+    document.getElementById('copy-family-msg-btn')?.addEventListener('click', (e) => {
+      const accuracy = this.state.answeredCount > 0
+        ? Math.round((this.state.correctCount / this.state.answeredCount) * 100)
+        : 100;
+      const modTitle = this.getActiveModule()?.title || 'Programme PER';
+      const studentLabel = this.state.currentUser ? `${this.state.currentUser.pseudo} (${this.state.currentUser.etablissement})` : 'Élève 11e VP';
+      const shareText = `🇨🇭 Bilan 11e VP — ${studentLabel} (Objectif Gymnase) :\n✅ ${this.state.xp} XP gagnés\n🎯 ${accuracy}% de réussite sur le programme PER (${modTitle})\n🔥 Série de ${this.state.streak} jours consécutifs !`;
+      navigator.clipboard?.writeText(shareText);
+      const btn = e.currentTarget;
+      const orig = btn.textContent;
+      btn.textContent = '✅ Résumé copié pour WhatsApp !';
+      setTimeout(() => { btn.textContent = orig; }, 2500);
+    });
+
+    // View 4: Paramètres Interactions
+    document.querySelectorAll('[data-pick-vibe]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.applyVibe(btn.dataset.pickVibe, true);
+      });
+    });
+
+    document.getElementById('toggle-german-subj')?.addEventListener('change', (e) => {
+      if (e.currentTarget.checked) {
+        if (!this.state.enabledSubjects.includes('allemand')) {
+          this.state.enabledSubjects.push('allemand');
+        }
+      } else {
+        this.state.enabledSubjects = this.state.enabledSubjects.filter(s => s !== 'allemand');
+        if (this.state.subject === 'allemand') {
+          this.state.subject = 'francais';
+        }
+      }
+      localStorage.setItem('vaud_enabled_subjects', JSON.stringify(this.state.enabledSubjects));
+      this.syncStateToCloud();
+      this.renderSubjectTabs();
+      this.renderModuleGrid();
+      this.renderLessonChapterSelect();
+      this.renderArena();
+    });
+
+    document.getElementById('select-all-chapters-btn')?.addEventListener('click', () => {
+      const allIds = CURRICULUM_DATA.francais.modules.map(m => m.id);
+      this.state.focusedModules = allIds;
+      localStorage.setItem('vaud_focused_customized', 'true');
+      localStorage.setItem('vaud_focused_modules', JSON.stringify(allIds));
+      this.syncStateToCloud();
+      this.renderSettingsView();
+      this.renderHeaderAndReadiness();
+      this.renderModuleGrid();
+      this.renderLessonChapterSelect();
+    });
+
+    // Keyboard Shortcuts [1-4] + Enter when in Entraînement View
     window.addEventListener('keydown', (e) => {
-      if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+      if (this.state.activeView !== 'entrainement') return;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+
       if (['1', '2', '3', '4'].includes(e.key) && !this.state.answeredCurrent) {
         const idx = parseInt(e.key, 10) - 1;
         const buttons = document.querySelectorAll('#options-container .option-btn');
