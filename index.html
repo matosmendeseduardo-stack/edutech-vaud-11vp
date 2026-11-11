@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Objectif Gymnase — 11e VP Vaud (Plateforme Gratuite PER v1.3.0)</title>
+  <title>Objectif Gymnase — 11e VP Vaud (Plateforme Gratuite PER v1.5.0)</title>
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
@@ -65,6 +65,9 @@
     <!-- LEFT / MAIN COLUMN: 4 Progressive-Disclosure Views -->
     <main class="single-focus-shell">
 
+      <!-- Contextual Banner when Teacher Assignment (#devoir=...) or Duel (#duel=...) is active -->
+      <div class="shared-context-banner" id="shared-context-banner" style="display: none;"></div>
+
       <!-- ================================================================
            VIEW 1: 📚 PARCOURS (Default Home View — Readiness & Chapters)
            ================================================================ -->
@@ -79,7 +82,7 @@
               </div>
               <h1 id="hero-title">Prêt pour ta session 11e VP ?</h1>
               <p id="hero-subtitle">
-                Révise étape par étape les 7 chapitres officiels vaudois (PER) à ton rythme, avec ton Coach IA toujours à côté.
+                Révise les 7 chapitres de Français, les 4 chapitres d’Allemand (PER L2) et entraîne-toi sur les Examens Blancs du Certificat, avec ton Coach IA toujours à côté.
               </p>
             </div>
 
@@ -89,6 +92,9 @@
               </button>
               <button class="secondary-btn" id="hero-sprint-btn" title="Lancer 60 secondes de questions rapides">
                 ⚡ Sprint 60s
+              </button>
+              <button class="secondary-btn" id="hero-exam-btn" title="Ouvrir la simulation complète Examen Blanc de Certificat Vaud">
+                🎓 Examen Blanc
               </button>
             </div>
           </div>
@@ -195,9 +201,13 @@
               <button class="mode-pill" data-mode="surgery">✂️ Chirurgie</button>
               <button class="mode-pill" data-mode="mistakes" id="mistakes-mode-pill">🔁 Erreurs (0)</button>
               <button class="mode-pill" data-mode="sprint">⏱️ Sprint 60s</button>
+              <button class="mode-pill" data-mode="exam">🎓 Examen Blanc</button>
               <span class="sprint-timer-pill" id="sprint-timer-badge" style="display:none;">⏱️ 60s</span>
             </div>
           </div>
+
+          <!-- Active 1v1 Duel Progress Strip (Visible only during synchronous/URL Duel) -->
+          <div class="duel-live-header" id="duel-live-header" style="display: none;"></div>
 
           <!-- POPOVER OVERLAY: Official PER Theory Sheet (Never pushes bottom bar off-screen!) -->
           <div class="theory-sheet-drawer" id="theory-sheet-drawer">
@@ -256,6 +266,87 @@
           </div>
 
         </div>
+
+        <!-- ================================================================
+             EXAMEN BLANC DE CERTIFICAT VAUD WORKSPACE (Timed Part 1 + Part 2)
+             ================================================================ -->
+        <div class="exam-blanc-workspace" id="exam-blanc-workspace">
+          <div class="exam-topbar">
+            <div class="exam-topbar-left">
+              <label for="exam-selector" class="sr-only">Choisir un examen blanc</label>
+              <select id="exam-selector" class="exam-select">
+                <!-- Populated dynamically -->
+              </select>
+              <div class="exam-part-tabs">
+                <button class="exam-part-btn active" id="exam-part1-tab" data-exam-part="1">
+                  📖 Partie 1 — Compréhension &amp; Langue (8 Q.)
+                </button>
+                <button class="exam-part-btn" id="exam-part2-tab" data-exam-part="2">
+                  ✍️ Partie 2 — Rédaction Argumentative
+                </button>
+              </div>
+            </div>
+            <div class="exam-topbar-left">
+              <span class="exam-timer-pill" id="exam-timer-pill">⏱️ 45:00</span>
+              <button class="secondary-btn compact-btn" id="exam-exit-btn">← Quitter</button>
+            </div>
+          </div>
+
+          <!-- PARTIE 1: Passage + 8 Certificat Questions -->
+          <div class="exam-body-grid" id="exam-part1-pane">
+            <div class="exam-passage-pane">
+              <div class="per-tag" id="exam-per-badge" style="margin-bottom:8px;">PER L1 31-38 • DGEO Vaud</div>
+              <h3 class="exam-passage-title" id="exam-passage-title">Texte d'examen</h3>
+              <div class="exam-passage-author" id="exam-passage-author">Extrait PER Vaud</div>
+              <div class="exam-passage-text" id="exam-passage-text"></div>
+            </div>
+            <div class="exam-questions-pane" id="exam-questions-list">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+
+          <!-- PARTIE 2: Rédaction Argumentative + Grille DGEO + Analyse Coach IA -->
+          <div class="exam-writing-pane" id="exam-part2-pane" style="display: none;">
+            <div class="exam-essay-prompt-box">
+              <div style="font-weight:800; margin-bottom:4px;">✍️ Consigne officielle — Texte Argumentatif (Certificat 11e VP)</div>
+              <div id="exam-writing-prompt"></div>
+              <div id="exam-writing-guidance" style="margin-top:6px; font-size:0.78rem; color:var(--text-secondary);"></div>
+            </div>
+
+            <div>
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-size:0.78rem; font-weight:700; color:var(--text-secondary);">
+                <span>Rédige ton texte structuré ci-dessous :</span>
+                <span id="exam-word-count">0 / 180 mots visés</span>
+              </div>
+              <textarea id="exam-essay-textarea" class="exam-essay-textarea" placeholder="Introduction (sujet amené, posé, divisé)...&#10;&#10;Développement (En effet... Certes... toutefois...)...&#10;&#10;Conclusion..."></textarea>
+            </div>
+
+            <div>
+              <div style="font-size:0.8rem; font-weight:700; margin-bottom:6px;">📋 Grille d’auto-évaluation DGEO Vaud :</div>
+              <div class="exam-rubric-list" id="exam-rubric-list">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+
+            <div class="exam-coach-report" id="exam-coach-report" style="display: none;"></div>
+          </div>
+
+          <!-- Docked Bottom Action Bar inside Exam -->
+          <div class="exam-footer-bar">
+            <span class="exam-grade-pill" id="exam-grade-pill">Note estimée : — / 6.0</span>
+            <div class="exam-topbar-left">
+              <button class="secondary-btn compact-btn" id="exam-grade-part1-btn">
+                ✅ Corriger Partie 1 (/6.0)
+              </button>
+              <button class="secondary-btn compact-btn" id="exam-eval-essay-btn" style="display:none;">
+                🤖 Évaluer ma rédaction (Coach IA)
+              </button>
+              <button class="primary-cta-btn compact-cta-btn" id="exam-switch-part-btn">
+                Passer à la Partie 2 (Rédaction) →
+              </button>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- ================================================================
@@ -286,14 +377,27 @@
             <div class="duel-generator-box">
               <div class="duel-code-label">CODE DE DÉFI SYNCHRONE (<span id="duel-active-chapter">Subordonnées</span>)</div>
               <div class="duel-code-value" id="duel-challenge-code">VD-11VP-4820</div>
-              <div class="duel-code-sub">Score à battre : <strong id="duel-xp-target">340 XP</strong> • 5 questions PER</div>
+              <div class="duel-code-sub">Score à battre : <strong id="duel-xp-target">340 XP</strong> • 5 questions PER encodées dans le lien</div>
 
               <div class="duel-actions-row">
                 <button class="primary-cta-btn" id="copy-duel-btn">
-                  🔗 Copier l’invitation Duel
+                  🔗 Copier le lien Duel (#duel=...)
                 </button>
                 <button class="secondary-btn" id="simulate-friend-btn">
                   🤖 Simuler un duel contre Léo (+30 XP)
+                </button>
+              </div>
+              <div class="duel-share-preview" id="duel-share-preview" style="display: none;"></div>
+            </div>
+
+            <div class="duel-join-box">
+              <label for="join-duel-input" class="duel-join-label">
+                ⚔️ Rejoindre un duel reçu d’un ami (colle le lien complet <code>#duel=...</code> ou entre le code <code>VD-11VP-...</code>) :
+              </label>
+              <div class="duel-join-row">
+                <input type="text" id="join-duel-input" class="auth-input" placeholder="Ex: https://.../#duel=... ou VD-11VP-4820" />
+                <button class="primary-cta-btn compact-cta-btn" id="join-duel-btn">
+                  Relever le défi →
                 </button>
               </div>
             </div>
@@ -389,9 +493,9 @@
             <label class="focus-check-item">
               <span class="focus-check-left">
                 <input type="checkbox" id="toggle-german-subj" />
-                <span>🇩🇪 <strong>Allemand 11e VP (Option / Aperçu)</strong> — PER L2 (Nebensätze, Perfekt)</span>
+                <span>🇩🇪 <strong>Allemand 11e VP (Programme complet PER L2)</strong> — 4 chapitres : Nebensätze, Perfekt/Präteritum, Kasus &amp; Wortschatz</span>
               </span>
-              <span class="placeholder-pill">Optionnel</span>
+              <span class="per-tag">4 chapitres PER L2</span>
             </label>
           </div>
         </div>
@@ -411,11 +515,48 @@
           </div>
         </div>
 
-        <!-- 4. Firebase Cloud Connection (edutech.emtechnica.ch) -->
+        <!-- 4. Mode Enseignant Vaudois (#devoir=...) -->
         <div class="surface-card settings-card">
           <div class="card-heading-row">
             <div>
-              <h2>☁️ 4. Connexion Cloud Firebase (edutech.emtechnica.ch)</h2>
+              <h2>👩‍🏫 4. Mode Enseignant — Créer un Devoir de Classe (#devoir=...)</h2>
+              <p class="settings-desc" style="margin-bottom:0;">
+                Coche 1 ou plusieurs chapitres (Français &amp; Allemand) et génère un lien direct à envoyer à ta classe de 11e VP : zéro serveur payant requis.
+              </p>
+            </div>
+            <span class="per-tag">Lien classe</span>
+          </div>
+
+          <div class="teacher-devoir-builder">
+            <div class="auth-field">
+              <label for="teacher-assignment-title">Titre du devoir ou de la révision :</label>
+              <input type="text" id="teacher-assignment-title" class="auth-input" value="Révision Certificat 11e VP — Classe 11VP" maxlength="80" />
+            </div>
+
+            <div>
+              <div class="settings-label" style="margin-bottom:6px;">Chapitres inclus dans le lien élève :</div>
+              <div class="teacher-chapters-pills" id="teacher-chapters-pills">
+                <!-- Populated dynamically by js/app.js -->
+              </div>
+            </div>
+
+            <div class="teacher-output-box">
+              <span class="teacher-output-link" id="teacher-devoir-link-preview">Clique sur Générer pour obtenir le lien élève...</span>
+              <button class="primary-cta-btn compact-cta-btn" id="generate-devoir-link-btn">
+                🔗 Copier le lien élève
+              </button>
+              <button class="secondary-btn compact-btn" id="preview-devoir-link-btn">
+                👁️ Prévisualiser
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. Firebase Cloud Connection (edutech.emtechnica.ch) -->
+        <div class="surface-card settings-card">
+          <div class="card-heading-row">
+            <div>
+              <h2>☁️ 5. Connexion Cloud Firebase (edutech.emtechnica.ch)</h2>
               <p class="settings-desc" style="margin-bottom:0;">
                 Synchronise les profils élèves, la file « Mes erreurs » et les Duels 1v1 via Firebase Auth &amp; Cloud Firestore (conforme nLPD Suisse).
               </p>
@@ -450,31 +591,30 @@
           </div>
         </div>
 
-        <!-- 5. Version v1.3.0 & Product Backlog -->
+        <!-- 6. Version v1.5.0 & Product Changelog -->
         <div class="surface-card settings-card">
           <div class="card-heading-row">
             <div>
-              <h2>📋 5. Version v1.3.0 &amp; Feuille de route</h2>
+              <h2>📋 6. Version v1.5.0 &amp; Programme Complet 11e VP</h2>
               <p class="settings-desc" style="margin-bottom:0;">Plateforme 100% gratuite et sans publicité pour les élèves de 11e VP du Canton de Vaud.</p>
             </div>
-            <span class="per-tag">v1.3.0</span>
+            <span class="per-tag">v1.5.0</span>
           </div>
 
           <div class="roadmap-columns">
             <div class="roadmap-box">
-              <h4>✅ Livré en v1.3.0 (Cloud Firebase &amp; Chapitre 7 Orthographe)</h4>
+              <h4>✅ Français 11e VP &amp; Examen Blanc (DGEO Vaud)</h4>
               <ul class="theory-points-list">
-                <li><strong>✒️ Chapitre 7 — Orthographe &amp; Accord du Participe Passé (PER L1 37)</strong> : Auxiliaires être/avoir (CDV antéposé) et verbes pronominaux (<em>se succéder, se laver les mains</em>).</li>
-                <li><strong>👤 Profil Élève &amp; Cloud Firebase (`edutech.emtechnica.ch`)</strong> : Connexion rapide par Pseudo vaudois (conforme nLPD) ou Email/Google, avec règles `firestore.rules` durcies.</li>
-                <li><strong>🤖 Coach IA Fixe &amp; Exercices Zéro-Scroll</strong> : Toujours visibles à l’écran sans jamais défiler.</li>
+                <li><strong>✒️ 7 Chapitres Officiels + Dictées Interactives (PER L1 31-38)</strong> : Subordonnées, fonctions PER (CP/CDV/CIV), discours, conjugaison, figures, argumentation et orthographe + générateur combinatoire.</li>
+                <li><strong>🎓 Mode « Examen Blanc de Certificat Vaud »</strong> : 2 simulations chronométrées (45 min) avec texte littéraire/argumentatif, note suisse <code>/6.0</code> et évaluation de rédaction par le Coach IA.</li>
               </ul>
             </div>
 
             <div class="roadmap-box">
-              <h4>🚀 Prochaines étapes (Backlog)</h4>
+              <h4>✅ Allemand PER L2, Cloud &amp; Partage URL</h4>
               <ul class="theory-points-list">
-                <li><strong>v1.4.0 — Examen Blanc du Certificat Vaud</strong> : Simulation chronométrée complète (compréhension + texte argumentatif).</li>
-                <li><strong>v1.5.0 — Programme Complet Allemand 11e VP</strong> : Extension de tous les chapitres PER L2 (Perfekt, Präteritum, Passiv).</li>
+                <li><strong>🇩🇪 Programme Complet Allemand 11e VP (4 Chapitres)</strong> : <em>Hauptsatz V2 &amp; Nebensätze</em>, <em>Perfekt &amp; Präteritum</em>, <em>Kasus &amp; Wechselpräpositionen</em> et <em>Wortschatz</em>.</li>
+                <li><strong>⚔️ Duels 1v1 (<code>#duel=...</code>) &amp; Mode Enseignant (<code>#devoir=...</code>)</strong> : Partage instantané par lien WhatsApp + synchronisation Cloud Firestore &amp; nLPD Suisse.</li>
               </ul>
             </div>
           </div>
@@ -502,7 +642,7 @@
 
         <div class="ai-chat-history" id="ai-chat-history">
           <div class="ai-msg bot">
-            Salut ! 👋 Je suis ton <strong>Coach 11e VP Vaud</strong>. Je reste toujours visible ici à côté de ta page : pose-moi une question sur l’exercice en cours, les <em>subordonnées</em>, les <em>fonctions PER (CP, CDV)</em>, l’<em>accord du participe passé</em>, ou colle ton paragraphe argumentatif !
+            Salut ! 👋 Je suis ton <strong>Coach 11e VP Vaud</strong>. Je reste toujours visible ici à côté de ta page : pose-moi une question sur l’exercice en cours, les <em>subordonnées</em>, l’<em>accord du participe passé</em>, l’<em>allemand PER L2</em>, ou colle ton paragraphe argumentatif !
           </div>
         </div>
 
@@ -514,11 +654,11 @@
             <button class="ai-chip" data-prompt="Quelle est la différence entre subordonnée relative et complétive ?">
               Relative vs Complétive
             </button>
-            <button class="ai-chip" data-prompt="Explique-moi le Complément de phrase (CP) dans le PER Vaud.">
-              Fonction CP ?
+            <button class="ai-chip" data-prompt="Rappelle-moi la règle de l'accord du participe passé avec avoir et pronominaux.">
+              ✒️ Participe passé
             </button>
-            <button class="ai-chip" data-prompt="Comment structurer une introduction de texte argumentatif au Certificat ?">
-              Intro Argumentative
+            <button class="ai-chip" data-prompt="Explique-moi le Perfekt, Präteritum et les prépositions Dativ/Akkusativ en allemand.">
+              🇩🇪 Allemand L2
             </button>
           </div>
 
@@ -550,7 +690,7 @@
        MINIMAL FOOTER
        ==================================================================== -->
   <footer class="app-footer">
-    <span><strong>Objectif Gymnase — 11e VP Vaud (v1.3.0)</strong> • Aligné sur le Plan d’études romand (PER)</span>
+    <span><strong>Objectif Gymnase — 11e VP Vaud (v1.5.0)</strong> • Aligné sur le Plan d’études romand (PER)</span>
     <span>100% Gratuit • Propulsé par Firebase &amp; Conforme nLPD Suisse</span>
   </footer>
 

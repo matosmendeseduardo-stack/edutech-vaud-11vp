@@ -1,16 +1,18 @@
 /* ==========================================================================
    Main Application Controller — Objectif Gymnase (11e VP Vaud)
-   Version: v1.3.0 (Firebase Auth & Cloud Firestore + Chapitre 7 Orthographe)
+   Version: v1.5.0 (Full PER Curriculum FR + DE, Examen Blanc, URL Duels & Mode Enseignant)
    Includes:
-   - 7 Official Français 11e VP Chapters (including Module 7: Orthographe & PP)
-   - Student Auth & Profile Modal (nLPD Vaud Quick Pseudo + Email/Google Auth)
-   - Automatic Cloud Firestore Profile, Mistake Queue & 1v1 Duel Sync
+   - 7 Official Français 11e VP Chapters + 4 Full Allemand PER L2 Chapters
+   - Mode « Examen Blanc de Certificat Vaud » (Compréhension + Rédaction /6.0)
+   - URL-Encoded 1v1 Friend Duels (#duel=...) & Mode Enseignant (#devoir=...)
+   - Cloud Firestore Profile, Mistake Queue & Duels Sync (conforme nLPD)
    - Sticky AI Coach Next to Main Page + Zero-Scroll Exercise Frame
    ========================================================================== */
 
 const CURRICULUM_DATA = window.CURRICULUM_DATA;
 const VAUD_QUEST_STATIONS = window.VAUD_QUEST_STATIONS;
 const INITIAL_LEADERBOARD = window.INITIAL_LEADERBOARD;
+const CERTIFICAT_MOCK_EXAMS = window.CERTIFICAT_MOCK_EXAMS || [];
 const VaudAICoach = window.VaudAICoach;
 const VaudFirebaseService = window.VaudFirebaseService;
 const PERExerciseGenerator = window.PERExerciseGenerator;
@@ -22,7 +24,7 @@ class ObjectifGymnaseApp {
     const savedFocus = JSON.parse(localStorage.getItem('vaud_focused_modules') || JSON.stringify(defaultFrancaisFocus));
     const savedMistakes = JSON.parse(localStorage.getItem('vaud_mistake_questions') || '[]');
 
-    // Automatically include new v1.3.0 modules (like 'orthographe') unless user customized focus
+    // Automatically include all 7 Français chapters unless user customized focus
     const mergedFocus = [
       ...new Set([
         ...savedFocus,
@@ -39,7 +41,7 @@ class ObjectifGymnaseApp {
       subject: 'francais',
       activeModuleId: mergedFocus[0] || 'subordonnees',
       currentQuestionIndex: 0,
-      exerciseMode: 'all', // 'all' | 'surgery' | 'mistakes' | 'sprint'
+      exerciseMode: 'all', // 'all' | 'surgery' | 'mistakes' | 'sprint' | 'exam'
       theoryOpen: false,
       xp: parseInt(localStorage.getItem('vaud_xp') || '340', 10),
       streak: parseInt(localStorage.getItem('vaud_streak') || '5', 10),
@@ -51,7 +53,16 @@ class ObjectifGymnaseApp {
       duelCode: `VD-11VP-${Math.floor(1000 + Math.random() * 9000)}`,
       leaderboard: [...INITIAL_LEADERBOARD],
       currentUser: null,
-      isCloudConnected: false
+      isCloudConnected: false,
+      // v1.5.0: Examen Blanc, Synchronous URL Duels & Teacher Assignments
+      activeExamId: CERTIFICAT_MOCK_EXAMS[0]?.id || 'certif-ecrans',
+      activeExamPart: 1,
+      examAnswers: {},
+      examGraded: false,
+      examTimer: null,
+      examSecondsLeft: (CERTIFICAT_MOCK_EXAMS[0]?.durationMinutes || 45) * 60,
+      activeDuelSession: null,
+      teacherAssignment: null
     };
 
     this.aiCoach = new VaudAICoach();
@@ -65,7 +76,129 @@ class ObjectifGymnaseApp {
   init() {
     this.applyVibe(this.state.vibe, false);
     this.bindGlobalEvents();
+    this.handleHashRoute();
+    window.addEventListener('hashchange', () => this.handleHashRoute());
     this.renderAll();
+  }
+
+  /* ------------------------------------------------------------------------
+     URL Hash Codec (#duel=... & #devoir=...)
+     ------------------------------------------------------------------------ */
+  encodeSharePayload(obj) {
+    const json = JSON.stringify(obj);
+    const bytes = new TextEncoder().encode(json);
+    let bin = '';
+    bytes.forEach(b => { bin += String.fromCharCode(b); });
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  decodeSharePayload(raw) {
+    try {
+      const clean = String(raw || '').trim().replace(/-/g, '+').replace(/_/g, '/');
+      const padded = clean + '==='.slice((clean.length + 3) % 4);
+      const bin = atob(padded);
+      const bytes = Uint8Array.from(bin, ch => ch.charCodeAt(0));
+      return JSON.parse(new TextDecoder().decode(bytes));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  findModuleMeta(moduleId) {
+    for (const subjKey of Object.keys(CURRICULUM_DATA)) {
+      const mod = CURRICULUM_DATA[subjKey].modules.find(m => m.id === moduleId);
+      if (mod) return { subjKey, mod };
+    }
+    return null;
+  }
+
+  findQuestionById(questionId) {
+    for (const subjKey of Object.keys(CURRICULUM_DATA)) {
+      for (const mod of CURRICULUM_DATA[subjKey].modules) {
+        const found = mod.questions.find(q => q.id === questionId);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  buildDuelQuestionIds(mod) {
+    const ids = mod.questions.slice(0, 5).map(q => q.id);
+    if (ids.length < 5) {
+      const meta = this.findModuleMeta(mod.id);
+      const pool = meta ? CURRICULUM_DATA[meta.subjKey].modules.flatMap(m => m.questions) : [];
+      for (const q of pool) {
+        if (!ids.includes(q.id)) ids.push(q.id);
+        if (ids.length >= 5) break;
+      }
+    }
+    return ids;
+  }
+
+  handleHashRoute() {
+    const hash = window.location.hash || '';
+    if (hash.startsWith('#devoir=')) {
+      const decoded = this.decodeSharePayload(hash.slice('#devoir='.length));
+      if (decoded && Array.isArray(decoded.modules) && decoded.modules.length > 0) {
+        this.state.teacherAssignment = {
+          title: decoded.title || 'Devoir de classe 11e VP',
+          modules: decoded.modules
+        };
+        const firstMeta = this.findModuleMeta(decoded.modules[0]);
+        if (firstMeta) {
+          this.state.subject = firstMeta.subjKey;
+          this.state.activeModuleId = firstMeta.mod.id;
+          if (!this.state.enabledSubjects.includes(firstMeta.subjKey)) {
+            this.state.enabledSubjects.push(firstMeta.subjKey);
+          }
+        }
+        this.renderSharedContextBanner();
+        this.renderAll();
+      }
+      return;
+    }
+
+    if (hash.startsWith('#duel=')) {
+      const decoded = this.decodeSharePayload(hash.slice('#duel='.length));
+      if (decoded && decoded.modId) {
+        this.startDuelSession(decoded);
+      }
+    }
+  }
+
+  renderSharedContextBanner() {
+    const bannerEl = document.getElementById('shared-context-banner');
+    if (!bannerEl) return;
+
+    if (this.state.teacherAssignment) {
+      const a = this.state.teacherAssignment;
+      bannerEl.style.display = 'flex';
+      bannerEl.innerHTML = `
+        <div class="shared-context-banner-info">
+          <span>👩‍🏫</span>
+          <span>Devoir Enseignant actif : <strong>${a.title}</strong> (${a.modules.length} chapitre(s) ciblé(s))</span>
+        </div>
+        <div class="shared-context-banner-actions">
+          <button class="primary-cta-btn compact-cta-btn" id="banner-start-devoir-btn">Commencer le devoir →</button>
+          <button class="secondary-btn compact-btn" id="banner-clear-devoir-btn">Quitter ✕</button>
+        </div>
+      `;
+      bannerEl.querySelector('#banner-start-devoir-btn')?.addEventListener('click', () => {
+        this.switchView('entrainement');
+      });
+      bannerEl.querySelector('#banner-clear-devoir-btn')?.addEventListener('click', () => {
+        this.state.teacherAssignment = null;
+        if (window.location.hash.startsWith('#devoir=')) {
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+        this.renderSharedContextBanner();
+        this.renderAll();
+      });
+      return;
+    }
+
+    bannerEl.style.display = 'none';
+    bannerEl.innerHTML = '';
   }
 
   /* ------------------------------------------------------------------------
@@ -100,11 +233,22 @@ class ObjectifGymnaseApp {
       meRow.xp = this.state.xp;
     }
 
-    // If connected to Cloud Firestore, attempt to fetch live leaderboard
+    // If connected to Cloud Firestore, sync leaderboard + personal mistake queue
     if (this.firebaseService && this.state.isCloudConnected) {
-      const cloudRows = await this.firebaseService.fetchLeaderboard();
+      const [cloudRows, cloudMistakes] = await Promise.all([
+        this.firebaseService.fetchLeaderboard(),
+        this.firebaseService.loadCloudMistakes()
+      ]);
       if (cloudRows && cloudRows.length > 0) {
         this.state.leaderboard = cloudRows;
+      }
+      if (Array.isArray(cloudMistakes) && cloudMistakes.length > 0) {
+        const merged = [...this.state.mistakeQuestions];
+        for (const cm of cloudMistakes) {
+          if (!merged.some(m => m.id === cm.id)) merged.push(cm);
+        }
+        this.state.mistakeQuestions = merged;
+        localStorage.setItem('vaud_mistake_questions', JSON.stringify(merged));
       }
     }
 
@@ -425,6 +569,12 @@ class ObjectifGymnaseApp {
   getVisibleModulesForSubject(subjKey = this.state.subject) {
     const subjectData = CURRICULUM_DATA[subjKey];
     if (!subjectData) return [];
+
+    if (this.state.teacherAssignment?.modules?.length) {
+      const assigned = subjectData.modules.filter(m => this.state.teacherAssignment.modules.includes(m.id));
+      if (assigned.length > 0) return assigned;
+    }
+
     if (subjKey !== 'francais') return subjectData.modules;
 
     const filtered = subjectData.modules.filter(m => this.state.focusedModules.includes(m.id));
@@ -436,6 +586,7 @@ class ObjectifGymnaseApp {
      ------------------------------------------------------------------------ */
   renderAll() {
     this.renderAuthHeaderPill();
+    this.renderSharedContextBanner();
     this.renderHeaderAndReadiness();
     this.renderSubjectTabs();
     this.renderQuestMap();
@@ -457,7 +608,9 @@ class ObjectifGymnaseApp {
     const totalQ = visibleModules.reduce((acc, m) => acc + m.questions.length, 0);
     const summaryEl = document.getElementById('active-focus-summary');
     if (summaryEl) {
-      summaryEl.textContent = `Focus actif : ${visibleModules.length}/${CURRICULUM_DATA.francais.modules.length} chapitres PER (${totalQ} exercices)`;
+      summaryEl.textContent = this.state.teacherAssignment
+        ? `👩‍🏫 Devoir actif : ${this.state.teacherAssignment.title} (${this.state.teacherAssignment.modules.length} chapitres)`
+        : `Focus actif : ${visibleModules.length}/${CURRICULUM_DATA.francais.modules.length} chapitres PER (${totalQ} exercices)`;
     }
 
     const mistakesPill = document.getElementById('mistakes-mode-pill');
@@ -478,7 +631,7 @@ class ObjectifGymnaseApp {
 
     const subjectMeta = [
       { id: 'francais', label: '📘 Français 11e VP' },
-      { id: 'allemand', label: '🇩🇪 Allemand 11e VP (Aperçu)' }
+      { id: 'allemand', label: '🇩🇪 Allemand 11e VP (4 chapitres)' }
     ];
 
     const activeList = subjectMeta.filter(s => this.state.enabledSubjects.includes(s.id));
@@ -590,10 +743,20 @@ class ObjectifGymnaseApp {
   }
 
   selectModuleAndStart(moduleId) {
+    const meta = this.findModuleMeta(moduleId);
+    if (meta) this.state.subject = meta.subjKey;
     this.state.activeModuleId = moduleId;
+    this.state.activeDuelSession = null;
+    if (this.state.exerciseMode === 'exam') {
+      this.state.exerciseMode = 'all';
+    }
     this.state.currentQuestionIndex = 0;
     this.state.answeredCurrent = false;
     this.state.theoryOpen = false;
+    document.querySelectorAll('.mode-pill[data-mode]').forEach(p => {
+      p.classList.toggle('active', p.dataset.mode === this.state.exerciseMode);
+    });
+    this.renderSubjectTabs();
     this.renderModuleGrid();
     this.renderLessonChapterSelect();
     this.renderArena();
@@ -607,6 +770,9 @@ class ObjectifGymnaseApp {
   }
 
   getFilteredQuestions() {
+    if (this.state.activeDuelSession?.questions?.length) {
+      return this.state.activeDuelSession.questions;
+    }
     const mod = this.getActiveModule();
     if (this.state.exerciseMode === 'mistakes' && this.state.mistakeQuestions.length > 0) {
       return this.state.mistakeQuestions;
@@ -636,7 +802,60 @@ class ObjectifGymnaseApp {
     if (toggleBtn) toggleBtn.classList.toggle('active', this.state.theoryOpen);
   }
 
+  renderDuelLiveHeader() {
+    const headerEl = document.getElementById('duel-live-header');
+    if (!headerEl) return;
+
+    const duel = this.state.activeDuelSession;
+    if (!duel) {
+      headerEl.style.display = 'none';
+      headerEl.innerHTML = '';
+      return;
+    }
+
+    headerEl.style.display = 'flex';
+    const total = duel.questions.length;
+    if (duel.finished) {
+      const target = duel.challengerScore <= total ? duel.challengerScore : Math.min(total, 4);
+      const won = duel.correctCount >= target;
+      headerEl.innerHTML = `
+        <span>🏁 Duel ${duel.challengeCode} terminé vs <strong>${duel.challengerName}</strong> — Ton score : <strong>${duel.correctCount}/${total}</strong> (${won ? '🏆 Victoire !' : '💪 Beau duel !'})</span>
+        <button class="secondary-btn compact-btn" id="exit-duel-btn">Terminer ✕</button>
+      `;
+    } else {
+      const round = (this.state.currentQuestionIndex % total) + 1;
+      headerEl.innerHTML = `
+        <span>⚔️ Duel <strong>${duel.challengeCode}</strong> vs ${duel.challengerName} • Manche <strong>${round}/${total}</strong> • Score : <strong>${duel.correctCount}</strong></span>
+        <button class="secondary-btn compact-btn" id="exit-duel-btn">Quitter duel ✕</button>
+      `;
+    }
+
+    headerEl.querySelector('#exit-duel-btn')?.addEventListener('click', () => {
+      this.state.activeDuelSession = null;
+      this.state.currentQuestionIndex = 0;
+      if (window.location.hash.startsWith('#duel=')) {
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
+      this.renderArena();
+    });
+  }
+
   renderArena() {
+    const arenaCard = document.getElementById('arena-section');
+    const examWorkspace = document.getElementById('exam-blanc-workspace');
+
+    if (this.state.exerciseMode === 'exam') {
+      if (arenaCard) arenaCard.style.display = 'none';
+      if (examWorkspace) examWorkspace.classList.add('open');
+      this.renderExamWorkspace();
+      return;
+    }
+
+    if (arenaCard) arenaCard.style.display = 'flex';
+    if (examWorkspace) examWorkspace.classList.remove('open');
+
+    this.renderDuelLiveHeader();
+
     const mod = this.getActiveModule();
     if (!mod) return;
 
@@ -648,12 +867,16 @@ class ObjectifGymnaseApp {
 
     const titleEl = document.getElementById('arena-module-title');
     const refEl = document.getElementById('arena-per-ref');
-    if (titleEl) titleEl.textContent = `${mod.icon} ${mod.title.split('(')[0].trim()}`;
+    if (titleEl) {
+      titleEl.textContent = this.state.activeDuelSession
+        ? `⚔️ Duel 1v1 — ${this.state.activeDuelSession.moduleTitle.split('(')[0].trim()}`
+        : `${mod.icon} ${mod.title.split('(')[0].trim()}`;
+    }
     if (refEl) refEl.textContent = mod.perRef;
 
-    const modeBadge = this.state.exerciseMode === 'mistakes'
-      ? ' • 🔁 Erreurs'
-      : (q.isGenerated ? ' • ✨ Généré' : '');
+    const modeBadge = this.state.activeDuelSession
+      ? ' • ⚔️ Duel'
+      : (this.state.exerciseMode === 'mistakes' ? ' • 🔁 Erreurs' : (q.isGenerated ? ' • ✨ Généré' : ''));
     const counterEl = document.getElementById('question-counter');
     if (counterEl) {
       counterEl.textContent = `Question ${idx + 1} / ${questions.length}${modeBadge}`;
@@ -726,19 +949,26 @@ class ObjectifGymnaseApp {
     const feedbackTitle = document.getElementById('feedback-title');
     const feedbackRule = document.getElementById('feedback-rule');
 
+    if (this.state.activeDuelSession && !this.state.activeDuelSession.finished) {
+      this.state.activeDuelSession.answered += 1;
+      if (isCorrect) this.state.activeDuelSession.correctCount += 1;
+      this.renderDuelLiveHeader();
+    }
+
     if (isCorrect) {
       clickedEl.classList.add('correct');
       const gainedXp = this.state.exerciseMode === 'sprint' ? 35 : 25;
       this.state.xp += gainedXp;
       this.state.correctCount += 1;
 
-      const beforeLen = this.state.mistakeQuestions.length;
+      const hadMistake = this.state.mistakeQuestions.some(item => item.id === this.currentQuestion.id);
       this.state.mistakeQuestions = this.state.mistakeQuestions.filter(item => item.id !== this.currentQuestion.id);
       localStorage.setItem('vaud_mistake_questions', JSON.stringify(this.state.mistakeQuestions));
+      if (hadMistake) {
+        this.firebaseService?.deleteCloudMistake(this.currentQuestion.id);
+      }
 
-      const clearedNote = beforeLen > this.state.mistakeQuestions.length
-        ? ' • 🎯 Retiré de « Mes erreurs » !'
-        : '';
+      const clearedNote = hadMistake ? ' • 🎯 Retiré de « Mes erreurs » !' : '';
       feedbackTitle.innerHTML = `✅ Excellent ! +${gainedXp} XP${clearedNote}`;
       feedbackTitle.style.color = '#10b981';
     } else {
@@ -746,6 +976,7 @@ class ObjectifGymnaseApp {
       if (!this.state.mistakeQuestions.some(item => item.id === this.currentQuestion.id)) {
         this.state.mistakeQuestions.push(this.currentQuestion);
         localStorage.setItem('vaud_mistake_questions', JSON.stringify(this.state.mistakeQuestions));
+        this.firebaseService?.upsertCloudMistake(this.currentQuestion);
       }
       feedbackTitle.innerHTML = `❌ Pas tout à fait — Ajouté à « 🔁 Erreurs » :`;
       feedbackTitle.style.color = '#f43f5e';
@@ -776,6 +1007,12 @@ class ObjectifGymnaseApp {
 
   nextQuestion() {
     this.state.theoryOpen = false;
+    const duel = this.state.activeDuelSession;
+    if (duel && !duel.finished && this.state.currentQuestionIndex + 1 >= duel.questions.length) {
+      this.finishDuelSession();
+      return;
+    }
+
     if (this.state.exerciseMode === 'mistakes' && this.state.mistakeQuestions.length === 0) {
       this.state.exerciseMode = 'all';
       document.querySelectorAll('.mode-pill[data-mode]').forEach(p => {
@@ -787,10 +1024,84 @@ class ObjectifGymnaseApp {
     this.renderArena();
   }
 
+  async finishDuelSession() {
+    const duel = this.state.activeDuelSession;
+    if (!duel || duel.finished) return;
+
+    duel.finished = true;
+    const total = duel.questions.length;
+    const target = duel.challengerScore <= total ? duel.challengerScore : Math.min(total, 4);
+    const won = duel.correctCount >= target;
+    const bonus = won ? 40 : 15;
+
+    this.state.xp += bonus;
+    localStorage.setItem('vaud_xp', String(this.state.xp));
+
+    if (this.firebaseService && this.state.isCloudConnected && duel.challengeCode) {
+      await this.firebaseService.completeCloudDuel(duel.challengeCode, duel.correctCount);
+    }
+
+    this.syncStateToCloud();
+    this.renderDuelLiveHeader();
+    this.renderHeaderAndReadiness();
+    this.renderDefisAndFamilyView();
+
+    const feedbackBanner = document.getElementById('feedback-banner');
+    const feedbackTitle = document.getElementById('feedback-title');
+    const feedbackRule = document.getElementById('feedback-rule');
+    if (feedbackBanner && feedbackTitle && feedbackRule) {
+      feedbackTitle.innerHTML = won
+        ? `🏆 Duel remporté contre ${duel.challengerName} (${duel.correctCount}/${total}) • +${bonus} XP !`
+        : `⚔️ Duel terminé (${duel.correctCount}/${total} vs ${target}/${total}) • +${bonus} XP d’effort !`;
+      feedbackTitle.style.color = won ? '#10b981' : 'var(--accent-primary)';
+      feedbackRule.textContent = 'Tu peux cliquer sur « Quitter duel ✕ » pour revenir aux chapitres ou relancer un nouveau duel dans 🏆 Défis & Famille.';
+      feedbackBanner.classList.add('visible');
+    }
+  }
+
+  startDuelSession(payload) {
+    const meta = this.findModuleMeta(payload.modId || 'subordonnees');
+    if (meta) {
+      this.state.subject = meta.subjKey;
+      this.state.activeModuleId = meta.mod.id;
+    }
+    const fallbackMod = meta?.mod || CURRICULUM_DATA.francais.modules[0];
+    let questions = Array.isArray(payload.qIds)
+      ? payload.qIds.map(id => this.findQuestionById(id)).filter(Boolean)
+      : [];
+    if (questions.length === 0) {
+      questions = this.buildDuelQuestionIds(fallbackMod).map(id => this.findQuestionById(id)).filter(Boolean);
+    }
+
+    this.state.activeDuelSession = {
+      challengeCode: payload.code || 'VD-11VP-DUEL',
+      challengerName: payload.ch || 'Camarade 11e VP',
+      challengerScore: typeof payload.score === 'number' ? payload.score : Math.min(5, Math.max(3, questions.length - 1)),
+      moduleId: fallbackMod.id,
+      moduleTitle: payload.modTitle || fallbackMod.title,
+      questions,
+      answered: 0,
+      correctCount: 0,
+      finished: false
+    };
+    this.state.exerciseMode = 'all';
+    this.state.currentQuestionIndex = 0;
+    this.state.answeredCurrent = false;
+    this.state.theoryOpen = false;
+    document.querySelectorAll('.mode-pill[data-mode]').forEach(p => {
+      p.classList.toggle('active', p.dataset.mode === 'all');
+    });
+    this.renderSubjectTabs();
+    this.renderLessonChapterSelect();
+    this.switchView('entrainement');
+    this.renderArena();
+  }
+
   generateAndOpenNewExercise() {
     const mod = this.getActiveModule();
     if (!mod || !PERExerciseGenerator) return;
 
+    this.state.activeDuelSession = null;
     this.state.theoryOpen = false;
     const newQ = PERExerciseGenerator.generateForModule(mod.id);
     mod.questions.push(newQ);
@@ -806,6 +1117,7 @@ class ObjectifGymnaseApp {
   }
 
   startSprintMode() {
+    this.state.activeDuelSession = null;
     this.switchView('entrainement');
     this.state.exerciseMode = 'sprint';
     this.state.sprintSecondsLeft = 60;
@@ -830,6 +1142,226 @@ class ObjectifGymnaseApp {
     }, 1000);
 
     this.renderArena();
+  }
+
+  /* ------------------------------------------------------------------------
+     Mode « Examen Blanc de Certificat Vaud » (DGEO 11e VP Simulation)
+     ------------------------------------------------------------------------ */
+  getActiveExam() {
+    return CERTIFICAT_MOCK_EXAMS.find(e => e.id === this.state.activeExamId) || CERTIFICAT_MOCK_EXAMS[0];
+  }
+
+  startMockExam(examId = null) {
+    if (examId) {
+      this.state.activeExamId = examId;
+    }
+    const exam = this.getActiveExam();
+    if (!exam) return;
+
+    this.state.activeDuelSession = null;
+    this.state.exerciseMode = 'exam';
+    this.state.activeExamPart = 1;
+    this.state.examAnswers = {};
+    this.state.examGraded = false;
+    this.state.examSecondsLeft = (exam.durationMinutes || 45) * 60;
+
+    if (this.state.sprintTimer) clearInterval(this.state.sprintTimer);
+    const sprintBadge = document.getElementById('sprint-timer-badge');
+    if (sprintBadge) sprintBadge.style.display = 'none';
+
+    document.querySelectorAll('.mode-pill[data-mode]').forEach(p => {
+      p.classList.toggle('active', p.dataset.mode === 'exam');
+    });
+
+    this.startExamTimer();
+    this.switchView('entrainement');
+    this.renderArena();
+  }
+
+  startExamTimer() {
+    if (this.state.examTimer) clearInterval(this.state.examTimer);
+    const updateLabel = () => {
+      const el = document.getElementById('exam-timer-pill');
+      if (!el) return;
+      const mins = Math.floor(this.state.examSecondsLeft / 60);
+      const secs = this.state.examSecondsLeft % 60;
+      el.textContent = `⏱️ ${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    };
+    updateLabel();
+    this.state.examTimer = setInterval(() => {
+      if (this.state.exerciseMode !== 'exam') return;
+      if (this.state.examSecondsLeft > 0) {
+        this.state.examSecondsLeft -= 1;
+        updateLabel();
+      }
+    }, 1000);
+  }
+
+  exitExamMode() {
+    if (this.state.examTimer) clearInterval(this.state.examTimer);
+    this.state.exerciseMode = 'all';
+    document.querySelectorAll('.mode-pill[data-mode]').forEach(p => {
+      p.classList.toggle('active', p.dataset.mode === 'all');
+    });
+    this.renderArena();
+  }
+
+  renderExamWorkspace() {
+    const exam = this.getActiveExam();
+    if (!exam) return;
+
+    const selectEl = document.getElementById('exam-selector');
+    if (selectEl) {
+      selectEl.innerHTML = CERTIFICAT_MOCK_EXAMS.map(ex => `
+        <option value="${ex.id}" ${ex.id === exam.id ? 'selected' : ''}>${ex.title}</option>
+      `).join('');
+    }
+
+    const p1Btn = document.getElementById('exam-part1-tab');
+    const p2Btn = document.getElementById('exam-part2-tab');
+    const p1Pane = document.getElementById('exam-part1-pane');
+    const p2Pane = document.getElementById('exam-part2-pane');
+    const gradeP1Btn = document.getElementById('exam-grade-part1-btn');
+    const evalEssayBtn = document.getElementById('exam-eval-essay-btn');
+    const switchBtn = document.getElementById('exam-switch-part-btn');
+
+    const isPart1 = this.state.activeExamPart === 1;
+    p1Btn?.classList.toggle('active', isPart1);
+    p2Btn?.classList.toggle('active', !isPart1);
+    if (p1Pane) p1Pane.style.display = isPart1 ? 'grid' : 'none';
+    if (p2Pane) p2Pane.style.display = isPart1 ? 'none' : 'flex';
+    if (gradeP1Btn) gradeP1Btn.style.display = isPart1 ? 'inline-flex' : 'none';
+    if (evalEssayBtn) evalEssayBtn.style.display = isPart1 ? 'none' : 'inline-flex';
+    if (switchBtn) {
+      switchBtn.textContent = isPart1
+        ? 'Passer à la Partie 2 (Rédaction) →'
+        : '← Revenir à la Partie 1 (Texte & QCM)';
+    }
+
+    document.getElementById('exam-per-badge').textContent = exam.perBadge;
+    document.getElementById('exam-passage-title').textContent = exam.passageTitle;
+    document.getElementById('exam-passage-author').textContent = exam.passageAuthor;
+    document.getElementById('exam-passage-text').textContent = exam.passageText;
+
+    const qListEl = document.getElementById('exam-questions-list');
+    if (qListEl) {
+      qListEl.innerHTML = exam.questions.map(q => {
+        const chosenIdx = this.state.examAnswers[q.id];
+        return `
+          <div class="exam-question-item">
+            <div class="exam-q-prompt">${q.prompt}</div>
+            ${q.sentence ? `<div class="exam-q-sentence">${q.sentence}</div>` : ''}
+            <div class="exam-q-options">
+              ${q.options.map((opt, idx) => {
+                const classes = ['exam-opt-btn'];
+                if (chosenIdx === idx) classes.push('selected');
+                if (this.state.examGraded) {
+                  if (idx === q.correctIndex) classes.push('correct');
+                  else if (chosenIdx === idx) classes.push('wrong');
+                }
+                return `<button class="${classes.join(' ')}" data-exam-qid="${q.id}" data-exam-opt="${idx}" ${this.state.examGraded ? 'disabled' : ''}>${opt}</button>`;
+              }).join('')}
+            </div>
+            ${this.state.examGraded ? `<div class="exam-q-explanation">💡 ${q.perRule}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+
+      qListEl.querySelectorAll('.exam-opt-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (this.state.examGraded) return;
+          this.state.examAnswers[btn.dataset.examQid] = parseInt(btn.dataset.examOpt, 10);
+          this.renderExamWorkspace();
+        });
+      });
+    }
+
+    document.getElementById('exam-writing-prompt').textContent = exam.writingPrompt;
+    document.getElementById('exam-writing-guidance').textContent = exam.writingGuidance;
+
+    const rubricEl = document.getElementById('exam-rubric-list');
+    if (rubricEl) {
+      rubricEl.innerHTML = exam.rubric.map((item, i) => `
+        <label class="exam-rubric-item">
+          <input type="checkbox" class="exam-rubric-cb" data-rubric-idx="${i}" />
+          <span>${item}</span>
+        </label>
+      `).join('');
+    }
+  }
+
+  gradeExamPart1() {
+    const exam = this.getActiveExam();
+    if (!exam || this.state.examGraded) return;
+
+    this.state.examGraded = true;
+    let correct = 0;
+    exam.questions.forEach(q => {
+      const chosen = this.state.examAnswers[q.id];
+      this.state.answeredCount += 1;
+      if (chosen === q.correctIndex) {
+        correct += 1;
+        this.state.correctCount += 1;
+      } else {
+        const mistakeCopy = { ...q, type: 'mcq' };
+        if (!this.state.mistakeQuestions.some(m => m.id === mistakeCopy.id)) {
+          this.state.mistakeQuestions.push(mistakeCopy);
+          this.firebaseService?.upsertCloudMistake(mistakeCopy);
+        }
+      }
+    });
+    localStorage.setItem('vaud_mistake_questions', JSON.stringify(this.state.mistakeQuestions));
+
+    // Swiss Canton of Vaud scale (/6.0, rounded to 0.5, threshold 4.0)
+    const rawGrade = 1 + 5 * (correct / exam.questions.length);
+    const grade = Math.round(rawGrade * 2) / 2;
+    const bonusXp = correct >= 5 ? 50 : 25;
+    this.state.xp += bonusXp;
+    localStorage.setItem('vaud_xp', String(this.state.xp));
+    localStorage.setItem('vaud_answered', String(this.state.answeredCount));
+    localStorage.setItem('vaud_correct', String(this.state.correctCount));
+
+    const pillEl = document.getElementById('exam-grade-pill');
+    if (pillEl) {
+      pillEl.textContent = `Note Partie 1 : ${grade.toFixed(1)} / 6.0 (${correct}/${exam.questions.length}) • +${bonusXp} XP`;
+      pillEl.classList.toggle('pass', grade >= 4.0);
+    }
+
+    this.syncStateToCloud();
+    this.renderHeaderAndReadiness();
+    this.renderExamWorkspace();
+  }
+
+  evaluateExamEssay() {
+    const exam = this.getActiveExam();
+    const textarea = document.getElementById('exam-essay-textarea');
+    const reportEl = document.getElementById('exam-coach-report');
+    if (!exam || !textarea || !reportEl) return;
+
+    const text = textarea.value.trim();
+    const checkedRubric = document.querySelectorAll('#exam-rubric-list .exam-rubric-cb:checked').length;
+    const report = this.aiCoach.evaluateArgumentativeEssay(exam.title, text);
+
+    reportEl.style.display = 'block';
+    reportEl.innerHTML = `
+      <div><strong>🤖 Évaluation Coach IA (Critères DGEO Vaud)</strong> — Note estimée : <strong>${report.scoreOver6.toFixed(1)} / 6.0</strong> (${report.wordCount} mots • ${checkedRubric}/${exam.rubric.length} critères cochés)</div>
+      <div style="margin-top:6px;">
+        <strong>Connecteurs logiques détectés :</strong> ${report.foundConnectors.length ? report.foundConnectors.map(c => `« ${c} »`).join(', ') : 'Aucun détecté ⚠️'}
+      </div>
+      <ul style="margin:6px 0 0 18px;">
+        ${report.tips.map(t => `<li>${t}</li>`).join('')}
+      </ul>
+    `;
+
+    const pillEl = document.getElementById('exam-grade-pill');
+    if (pillEl && !this.state.examGraded) {
+      pillEl.textContent = `Rédaction estimée : ${report.scoreOver6.toFixed(1)} / 6.0 (${report.wordCount} mots)`;
+      pillEl.classList.toggle('pass', report.scoreOver6 >= 4.0);
+    }
+
+    if (text.length >= 20) {
+      this.sendAICoachMessage(`Évalue mon texte d'examen blanc (${report.wordCount} mots) : ${text.slice(0, 320)}`);
+    }
   }
 
   /* ------------------------------------------------------------------------
@@ -940,6 +1472,51 @@ class ObjectifGymnaseApp {
         this.renderLessonChapterSelect();
       });
     });
+
+    this.renderTeacherAssignmentBuilder();
+  }
+
+  renderTeacherAssignmentBuilder() {
+    const pillsEl = document.getElementById('teacher-chapters-pills');
+    const previewEl = document.getElementById('teacher-devoir-link-preview');
+    if (!pillsEl) return;
+
+    const allModules = [
+      ...CURRICULUM_DATA.francais.modules.map(m => ({ ...m, subjLabel: 'FR' })),
+      ...CURRICULUM_DATA.allemand.modules.map(m => ({ ...m, subjLabel: 'DE' }))
+    ];
+
+    pillsEl.innerHTML = allModules.map(m => {
+      const checked = m.id === 'subordonnees' || m.id === 'orthographe';
+      return `
+        <label class="teacher-chap-pill">
+          <input type="checkbox" class="teacher-chap-cb" value="${m.id}" ${checked ? 'checked' : ''} />
+          <span>${m.icon} [${m.subjLabel}] ${m.title.split('(')[0].trim()}</span>
+        </label>
+      `;
+    }).join('');
+
+    const refreshPreview = () => {
+      const url = this.buildTeacherShareUrl();
+      if (previewEl && url) previewEl.textContent = url;
+    };
+
+    pillsEl.querySelectorAll('.teacher-chap-cb').forEach(cb => {
+      cb.addEventListener('change', refreshPreview);
+    });
+    document.getElementById('teacher-assignment-title')?.addEventListener('input', refreshPreview);
+    refreshPreview();
+  }
+
+  buildTeacherShareUrl() {
+    const title = document.getElementById('teacher-assignment-title')?.value.trim() || 'Révision Certificat 11e VP';
+    const checked = Array.from(document.querySelectorAll('.teacher-chap-cb:checked')).map(cb => cb.value);
+    const modules = checked.length ? checked : ['subordonnees'];
+    const encoded = this.encodeSharePayload({ title, modules });
+    const base = (typeof window !== 'undefined' && window.location)
+      ? `${window.location.origin}${window.location.pathname}`
+      : 'https://edutech-vaud-11vp.web.app/';
+    return `${base}#devoir=${encoded}`;
   }
 
   /* ------------------------------------------------------------------------
@@ -1056,7 +1633,12 @@ class ObjectifGymnaseApp {
           this.startSprintMode();
           return;
         }
+        if (mode === 'exam') {
+          this.startMockExam();
+          return;
+        }
         if (this.state.sprintTimer) clearInterval(this.state.sprintTimer);
+        if (this.state.examTimer) clearInterval(this.state.examTimer);
         const timerBadge = document.getElementById('sprint-timer-badge');
         if (timerBadge) timerBadge.style.display = 'none';
 
@@ -1084,6 +1666,48 @@ class ObjectifGymnaseApp {
 
     document.getElementById('hero-sprint-btn')?.addEventListener('click', () => {
       this.startSprintMode();
+    });
+
+    document.getElementById('hero-exam-btn')?.addEventListener('click', () => {
+      this.startMockExam();
+    });
+
+    // Examen Blanc de Certificat Vaud Controls
+    document.getElementById('exam-selector')?.addEventListener('change', (e) => {
+      this.startMockExam(e.currentTarget.value);
+    });
+
+    document.getElementById('exam-part1-tab')?.addEventListener('click', () => {
+      this.state.activeExamPart = 1;
+      this.renderExamWorkspace();
+    });
+
+    document.getElementById('exam-part2-tab')?.addEventListener('click', () => {
+      this.state.activeExamPart = 2;
+      this.renderExamWorkspace();
+    });
+
+    document.getElementById('exam-switch-part-btn')?.addEventListener('click', () => {
+      this.state.activeExamPart = this.state.activeExamPart === 1 ? 2 : 1;
+      this.renderExamWorkspace();
+    });
+
+    document.getElementById('exam-exit-btn')?.addEventListener('click', () => {
+      this.exitExamMode();
+    });
+
+    document.getElementById('exam-grade-part1-btn')?.addEventListener('click', () => {
+      this.gradeExamPart1();
+    });
+
+    document.getElementById('exam-eval-essay-btn')?.addEventListener('click', () => {
+      this.evaluateExamEssay();
+    });
+
+    document.getElementById('exam-essay-textarea')?.addEventListener('input', (e) => {
+      const words = e.currentTarget.value.trim().split(/\s+/).filter(Boolean).length;
+      const wcEl = document.getElementById('exam-word-count');
+      if (wcEl) wcEl.textContent = `${words} / 180 mots visés`;
     });
 
     // Sticky AI Coach Input & Quick Chips
@@ -1116,19 +1740,84 @@ class ObjectifGymnaseApp {
       }
     });
 
-    // View 3: Défis & Famille Actions (with Cloud Duel Creation)
+    // View 3: Défis & Famille Actions (URL-Encoded #duel=... & Cloud Firestore Duels)
     document.getElementById('copy-duel-btn')?.addEventListener('click', async (e) => {
       const activeMod = this.getActiveModule();
+      const modId = activeMod?.id || 'subordonnees';
       const modTitle = activeMod?.title || 'Programme PER';
+      const qIds = activeMod ? this.buildDuelQuestionIds(activeMod) : ['sub-1', 'sub-2', 'sub-3', 'sub-4', 'sub-5'];
+      const targetScore = Math.min(5, qIds.length);
+      const challengerName = this.state.currentUser?.pseudo || 'Ton camarade 11e VP';
+
       if (this.firebaseService) {
-        await this.firebaseService.createCloudDuel(this.state.duelCode, activeMod?.id || 'subordonnees', modTitle, this.state.xp);
+        await this.firebaseService.createCloudDuel(this.state.duelCode, modId, modTitle, targetScore, qIds);
       }
-      const duelText = `⚔️ Je te défie sur Objectif Gymnase (11e VP Vaud) ! Entre le code ${this.state.duelCode} sur le chapitre "${modTitle}" et essaie de battre mes ${this.state.xp} XP !`;
-      navigator.clipboard?.writeText(duelText);
+
+      const payload = {
+        code: this.state.duelCode,
+        modId,
+        modTitle,
+        ch: challengerName,
+        score: targetScore,
+        xp: this.state.xp,
+        qIds
+      };
+      const base = `${window.location.origin}${window.location.pathname}`;
+      const shareUrl = `${base}#duel=${this.encodeSharePayload(payload)}`;
+      const duelText = `⚔️ Duel Objectif Gymnase (11e VP Vaud) ! Rejoins mon défi ${this.state.duelCode} sur « ${modTitle.split('(')[0].trim()} » : ${shareUrl}`;
+      navigator.clipboard?.writeText(shareUrl);
+
+      const previewEl = document.getElementById('duel-share-preview');
+      if (previewEl) {
+        previewEl.style.display = 'block';
+        previewEl.textContent = duelText;
+      }
+
       const btn = e.currentTarget;
       const orig = btn.textContent;
-      btn.textContent = '✅ Invitation Duel copiée !';
+      btn.textContent = '✅ Lien Duel (#duel=...) copié !';
       setTimeout(() => { btn.textContent = orig; }, 2500);
+    });
+
+    document.getElementById('join-duel-btn')?.addEventListener('click', async () => {
+      const raw = document.getElementById('join-duel-input')?.value.trim();
+      if (!raw) return;
+
+      if (raw.includes('#duel=')) {
+        const hashPart = raw.split('#duel=')[1];
+        const decoded = this.decodeSharePayload(hashPart);
+        if (decoded) {
+          this.startDuelSession(decoded);
+          return;
+        }
+      }
+
+      const cleanCode = raw.toUpperCase();
+      const cloudDuel = this.firebaseService
+        ? await this.firebaseService.loadCloudDuel(cleanCode)
+        : null;
+
+      if (cloudDuel) {
+        this.startDuelSession({
+          code: cloudDuel.challengeCode,
+          modId: cloudDuel.moduleId,
+          modTitle: cloudDuel.moduleTitle,
+          ch: cloudDuel.challengerName,
+          score: cloudDuel.challengerScore,
+          qIds: cloudDuel.questionIds
+        });
+        return;
+      }
+
+      const activeMod = this.getActiveModule();
+      this.startDuelSession({
+        code: cleanCode.startsWith('VD-') ? cleanCode : `VD-DUEL-${cleanCode.slice(0, 8)}`,
+        modId: activeMod?.id || 'subordonnees',
+        modTitle: activeMod?.title || 'Programme PER',
+        ch: 'Camarade 11e VP',
+        score: 4,
+        qIds: activeMod ? this.buildDuelQuestionIds(activeMod) : []
+      });
     });
 
     document.getElementById('simulate-friend-btn')?.addEventListener('click', (e) => {
@@ -1156,11 +1845,32 @@ class ObjectifGymnaseApp {
       setTimeout(() => { btn.textContent = orig; }, 2500);
     });
 
-    // View 4: Paramètres Interactions
+    // View 4: Paramètres Interactions + Mode Enseignant (#devoir=...)
     document.querySelectorAll('[data-pick-vibe]').forEach(btn => {
       btn.addEventListener('click', () => {
         this.applyVibe(btn.dataset.pickVibe, true);
       });
+    });
+
+    document.getElementById('generate-devoir-link-btn')?.addEventListener('click', (e) => {
+      const url = this.buildTeacherShareUrl();
+      const previewEl = document.getElementById('teacher-devoir-link-preview');
+      if (previewEl) previewEl.textContent = url;
+      navigator.clipboard?.writeText(url);
+      const btn = e.currentTarget;
+      const orig = btn.textContent;
+      btn.textContent = '✅ Lien Devoir copié !';
+      setTimeout(() => { btn.textContent = orig; }, 2500);
+    });
+
+    document.getElementById('preview-devoir-link-btn')?.addEventListener('click', () => {
+      const url = this.buildTeacherShareUrl();
+      const hashIdx = url.indexOf('#devoir=');
+      if (hashIdx >= 0) {
+        window.location.hash = url.slice(hashIdx);
+        this.handleHashRoute();
+        this.switchView('parcours');
+      }
     });
 
     document.getElementById('toggle-german-subj')?.addEventListener('change', (e) => {
@@ -1197,6 +1907,7 @@ class ObjectifGymnaseApp {
     // Keyboard Shortcuts [1-4] + Enter when in Entraînement View
     window.addEventListener('keydown', (e) => {
       if (this.state.activeView !== 'entrainement') return;
+      if (this.state.exerciseMode === 'exam') return;
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
 
       if (['1', '2', '3', '4'].includes(e.key) && !this.state.answeredCurrent) {

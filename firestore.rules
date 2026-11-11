@@ -11,6 +11,7 @@ rules_version = '2';
 // Fields:
 //   - pseudo: string (required, 1..40 chars) - Student pseudonym (no PII)
 //   - etablissement: string (optional, 0..100 chars) - Vaud school name
+//   - avatar: string (optional, 0..16 chars) - Student emoji avatar
 //   - xp: int (required, 0..10000000) - Total experience points
 //   - streak: int (required, 0..10000) - Consecutive study days
 //   - answeredCount: int (required, 0..1000000) - Total questions answered
@@ -49,6 +50,7 @@ rules_version = '2';
 //   - challengerScore: int (required, 0..1000000) - Creator XP/score
 //   - moduleId: string (required, 1..60 chars, immutable) - PER chapter ID
 //   - moduleTitle: string (required, 1..120 chars, immutable) - PER chapter title
+//   - questionIds: list (optional, max 20 items, immutable) - Exact question IDs for synchronous 1v1 duel
 //   - opponentId: string (optional, 1..128 chars) - Opponent UID
 //   - opponentName: string (optional, 1..40 chars) - Opponent pseudo
 //   - opponentScore: int (optional, 0..1000000) - Opponent score
@@ -135,11 +137,12 @@ service cloud.firestore {
           'vibe', 'enabledSubjects', 'focusedModules', 'updatedAt'
         ]) &&
         hasOnlyAllowedFields([
-          'pseudo', 'etablissement', 'xp', 'streak', 'answeredCount',
+          'pseudo', 'etablissement', 'avatar', 'xp', 'streak', 'answeredCount',
           'correctCount', 'vibe', 'enabledSubjects', 'focusedModules', 'updatedAt'
         ]) &&
         validStringLength('pseudo', 1, 40) &&
         isValidOptionalString('etablissement', 0, 100) &&
+        isValidOptionalString('avatar', 0, 16) &&
         isValidNonNegativeInt('xp', 10000000) &&
         isValidNonNegativeInt('streak', 10000) &&
         isValidNonNegativeInt('answeredCount', 1000000) &&
@@ -179,7 +182,7 @@ service cloud.firestore {
         ]) &&
         hasOnlyAllowedFields([
           'challengeCode', 'challengerId', 'challengerName', 'challengerScore',
-          'moduleId', 'moduleTitle', 'opponentId', 'opponentName',
+          'moduleId', 'moduleTitle', 'questionIds', 'opponentId', 'opponentName',
           'opponentScore', 'status', 'createdAt', 'updatedAt'
         ]) &&
         validStringLength('challengeCode', 1, 30) &&
@@ -188,6 +191,7 @@ service cloud.firestore {
         isValidNonNegativeInt('challengerScore', 1000000) &&
         validStringLength('moduleId', 1, 60) &&
         validStringLength('moduleTitle', 1, 120) &&
+        (!('questionIds' in data) || isValidList(data.questionIds, 20)) &&
         isValidOptionalString('opponentId', 1, 128) &&
         isValidOptionalString('opponentName', 1, 40) &&
         isValidOptionalNonNegativeInt('opponentScore', 1000000) &&
@@ -236,7 +240,7 @@ service cloud.firestore {
         isValidDuel(request.resource.data) &&
         areImmutableFieldsUnchanged([
           'challengeCode', 'challengerId', 'challengerName',
-          'moduleId', 'moduleTitle', 'createdAt'
+          'moduleId', 'moduleTitle', 'questionIds', 'createdAt'
         ]) &&
         (
           // Challenger updating their own open/completed duel

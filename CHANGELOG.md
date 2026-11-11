@@ -4,6 +4,28 @@ Toutes les évolutions notables de la plateforme gratuite d'étude pour la **11e
 
 ---
 
+## [v1.5.0] — 2026-11-12
+### Ajouté (Programme Complet FR + DE, Examen Blanc Certificat, Duels URL & Mode Enseignant)
+- **🎓 Mode « Examen Blanc de Certificat Vaud » (`window.CERTIFICAT_MOCK_EXAMS`, `#exam-blanc-workspace`)** :
+  - 2 examens complets chronométrés (45 min) : *Texte Argumentatif & Langue* et *Analyse Littéraire & Poétique*.
+  - **Partie 1** : Texte structuré + 8 questions PER avec correction immédiate et **note vaudoise officielle `/6.0`** (seuil à `4.0`).
+  - **Partie 2** : Rédaction argumentative guidée, compteur de mots, **grille d'auto-évaluation DGEO Vaud** et **évaluation instantanée par le Coach IA (`evaluateArgumentativeEssay`)**.
+- **🇩🇪 Programme Complet Allemand 11e VP — PER L2 (4 Chapitres Complets)** :
+  - `1. Hauptsatz (V2) & Nebensätze (weil, dass, obwohl, wenn, als)`
+  - `2. Perfekt (haben/sein + Partizip II) & Präteritum (Modaux)`
+  - `3. Kasus (Nom, Akk, Dativ) & Wechselpräpositionen (Wo? / Wohin?)`
+  - `4. Wortschatz & Redewendungen 11e VP`
+- **✒️ Banque d'exercices étendue + Dictées Interactives & Générateur Combinatoire** :
+  - Nouveaux exercices sur tous les chapitres de Français, incluant **Dictée interactive / Repérage de fautes** (*Projet Voltaire* Vaud) et générateur `PERExerciseGenerator` couvrant les 7 chapitres FR et les 4 chapitres DE.
+- **⚔️ Défis Multijoueurs par URL (`#duel=...`) & Synchronisation Firestore complète** :
+  - Encodage des 5 mêmes questions PER directement dans le lien `#duel=...` + formulaire **Rejoindre un duel** par lien ou code Firestore, avec suivi des manches en direct et synchronisation de la file privée `/profiles/{uid}/mistakes`.
+- **👩‍🏫 Mode Enseignant Vaudois (`#devoir=...`)** :
+  - Générateur de liens de devoir de classe dans `⚙️ Paramètres` pour cibler 1 ou plusieurs chapitres (FR + DE) sans serveur payant.
+- **🔒 Sécurité Firestore (`firestore.rules`)** :
+  - Ajout du champ `avatar` sur `/profiles/{userId}` et `questionIds` immuable sur `/duels/{duelId}`.
+
+---
+
 ## [v1.3.0] — 2026-11-11
 ### Ajouté (Firebase Auth, Cloud Firestore, Règles de Sécurité & Chapitre 7 Orthographe PER)
 - **👤 Authentification & Profil Élève 11e VP (`js/firebase-service.js`)** :

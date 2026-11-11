@@ -238,19 +238,114 @@ window.VaudFirebaseService = class VaudFirebaseService {
     }
   }
 
-  async createCloudDuel(challengeCode, moduleId, moduleTitle, challengerScore) {
+  async loadCloudMistakes() {
+    if (!this.isCloudConnected || !this.db || !this.currentUser) return null;
+    try {
+      const colRef = this.sdk.collection(this.db, 'profiles', this.currentUser.uid, 'mistakes');
+      const snap = await this.sdk.getDocs(colRef);
+      const list = [];
+      snap.forEach(d => {
+        const data = d.data();
+        if (data && data.id && data.prompt) list.push(data);
+      });
+      return list;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async upsertCloudMistake(question) {
+    if (!this.isCloudConnected || !this.db || !this.currentUser || !question?.id) return false;
+    try {
+      const ref = this.sdk.doc(this.db, 'profiles', this.currentUser.uid, 'mistakes', String(question.id).slice(0, 100));
+      const payload = {
+        id: String(question.id).slice(0, 100),
+        type: question.type === 'surgery' ? 'surgery' : 'mcq',
+        prompt: String(question.prompt || '').slice(0, 500),
+        perRule: String(question.perRule || 'Règle PER 11e VP').slice(0, 1000),
+        addedAt: this.sdk.serverTimestamp()
+      };
+      if (typeof question.sentence === 'string') {
+        payload.sentence = question.sentence.slice(0, 1000);
+      }
+      if (Array.isArray(question.options)) {
+        payload.options = question.options.slice(0, 10).map(o => String(o));
+      }
+      if (typeof question.correctIndex === 'number') {
+        payload.correctIndex = Math.max(0, Math.min(10, Math.floor(question.correctIndex)));
+      }
+      if (Array.isArray(question.tokens)) {
+        payload.tokens = question.tokens.slice(0, 50).map(t => String(t));
+      }
+      if (typeof question.correctTokenIndex === 'number') {
+        payload.correctTokenIndex = Math.max(0, Math.min(50, Math.floor(question.correctTokenIndex)));
+      }
+      if (typeof question.isGenerated === 'boolean') {
+        payload.isGenerated = question.isGenerated;
+      }
+      await this.sdk.setDoc(ref, payload);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async deleteCloudMistake(questionId) {
+    if (!this.isCloudConnected || !this.db || !this.currentUser || !questionId) return false;
+    try {
+      const ref = this.sdk.doc(this.db, 'profiles', this.currentUser.uid, 'mistakes', String(questionId).slice(0, 100));
+      await this.sdk.deleteDoc(ref);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async createCloudDuel(challengeCode, moduleId, moduleTitle, challengerScore, questionIds = []) {
     if (!this.isCloudConnected || !this.db || !this.currentUser) return false;
     try {
       const ref = this.sdk.doc(this.db, 'duels', challengeCode);
-      await this.sdk.setDoc(ref, {
-        challengeCode,
+      const payload = {
+        challengeCode: String(challengeCode).slice(0, 30),
         challengerId: this.currentUser.uid,
-        challengerName: this.currentUser.pseudo,
-        challengerScore,
-        moduleId,
-        moduleTitle,
+        challengerName: (this.currentUser.pseudo || 'Élève 11e VP').slice(0, 40),
+        challengerScore: Math.max(0, Math.floor(challengerScore || 0)),
+        moduleId: String(moduleId || 'subordonnees').slice(0, 60),
+        moduleTitle: String(moduleTitle || 'Programme PER').slice(0, 120),
         status: 'open',
         createdAt: this.sdk.serverTimestamp()
+      };
+      if (Array.isArray(questionIds) && questionIds.length > 0) {
+        payload.questionIds = questionIds.slice(0, 20).map(q => String(q));
+      }
+      await this.sdk.setDoc(ref, payload);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async loadCloudDuel(challengeCode) {
+    if (!this.isCloudConnected || !this.db || !challengeCode) return null;
+    try {
+      const ref = this.sdk.doc(this.db, 'duels', String(challengeCode).trim().toUpperCase());
+      const snap = await this.sdk.getDoc(ref);
+      return snap.exists() ? snap.data() : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async completeCloudDuel(challengeCode, opponentScore) {
+    if (!this.isCloudConnected || !this.db || !this.currentUser || !challengeCode) return false;
+    try {
+      const ref = this.sdk.doc(this.db, 'duels', String(challengeCode).trim().toUpperCase());
+      await this.sdk.updateDoc(ref, {
+        opponentId: this.currentUser.uid,
+        opponentName: (this.currentUser.pseudo || 'Ami(e) 11e VP').slice(0, 40),
+        opponentScore: Math.max(0, Math.floor(opponentScore || 0)),
+        status: 'completed',
+        updatedAt: this.sdk.serverTimestamp()
       });
       return true;
     } catch (e) {

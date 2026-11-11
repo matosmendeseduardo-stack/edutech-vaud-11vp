@@ -57,6 +57,19 @@ window.VaudAICoach = class VaudAICoach {
       }
     }
 
+    if (lower.includes('participe') || lower.includes('orthographe') || lower.includes('accord') || lower.includes('pronominal') || lower.includes('homophone')) {
+      return `✒️ **Mémo PER — Participe passé & Orthographe** :
+• **Être** : accord avec le sujet (*Elles sont parties*).
+• **Avoir** : accord avec le **CDV** uniquement s'il est placé **avant** le verbe (*Les lettres qu'elle a écrites* vs *Elle a écrit des lettres*).
+• **Pronominaux** : si « se » = CIV (*se téléphoner, se succéder, se parler*), le participe passé est **invariable** !`;
+    }
+
+    if (lower.includes('discours') || lower.includes('indirect') || lower.includes('imparfait') || lower.includes('passé simple') || lower.includes('conditionnel') || lower.includes('subjonctif') || lower.includes('valeur')) {
+      return `⏳ **Discours rapporté & Valeurs des temps (PER)** :
+• **Discours indirect** (verbe introducteur au passé) : Présent → Imparfait | Passé composé → Plus-que-parfait | Futur → Conditionnel présent (*demain* → *le lendemain*).
+• **Récit** : **Imparfait** = arrière-plan/description/habitude ; **Passé simple** = premier plan/action soudaine et bornée.`;
+    }
+
     if (lower.includes('relative') || lower.includes('complétive') || lower.includes('completive') || lower.includes('que')) {
       return `🔍 **Astuce 11e VP (« que »)** :
 • Après un **nom** (antécédent) → *Subordonnée relative* (ex: « Le livre **que** je lis »).
@@ -75,15 +88,31 @@ window.VaudAICoach = class VaudAICoach {
 • **Oxymore vs Antithèse** : l'oxymore colle 2 mots opposés côte à côte (*« une obscure clarté »*), l'antithèse les sépare dans la phrase.`;
     }
 
+    if (lower.includes('perfekt') || lower.includes('präteritum') || lower.includes('partizip') || lower.includes('haben') || lower.includes('sein') || lower.includes('modal')) {
+      return `🇩🇪 **Perfekt & Präteritum (PER L2)** :
+• **Perfekt** : *haben* pour la majorité des verbes ; **sein** pour les déplacements (*gehen, fahren, fliegen*) et changements d'état (*aufstehen, werden, bleiben*). Attention : pas de *ge-* pour *be-, ver-, er-, ent-* (ex: *verstanden*).
+• **Präteritum** : pour *sein (war)*, *haben (hatte)* et les modaux (*konnte, musste, wollte, durfte*).`;
+    }
+
+    if (lower.includes('kasus') || lower.includes('dativ') || lower.includes('akkusativ') || lower.includes('nominativ') || lower.includes('préposition') || lower.includes('wohin')) {
+      return `🇩🇪 **Kasus & Wechselpräpositionen (PER L2)** :
+• **Toujours Dativ** : *mit, nach, aus, zu, von, bei, seit* (*mit dem Zug, bei meiner Freundin*).
+• **Toujours Akkusativ** : *durch, für, gegen, ohne, um* (*für den Bruder*).
+• **Mixtes (in, auf, an, unter, über)** : **Wo?** (statique) → *Dativ* | **Wohin?** (mouvement vers) → *Akkusativ* !`;
+    }
+
+    if (lower.includes('wortschatz') || lower.includes('vocabulaire') || lower.includes('allemand') || lower.includes('weil') || lower.includes('dass') || lower.includes('obwohl')) {
+      return `🇩🇪 **Tipp Allemand 11e VP** : Avec *weil*, *dass*, *obwohl* et *wenn*, le verbe conjugué part **tout à la fin** de la subordonnée. Si la subordonnée est en tête de phrase, applique **Verb, Verb** autour de la virgule !`;
+    }
+
     if (lower.includes('argument') || lower.includes('intro') || lower.includes('certificat') || query.split(' ').length > 14) {
       // Analyze student's argumentative paragraph!
-      const connectors = ['cependant', 'néanmoins', 'toutefois', 'en effet', 'de plus', 'ainsi', 'par conséquent', 'certes', 'or', 'donc'];
-      const found = connectors.filter(c => lower.includes(c));
-      const wordCount = query.split(/\s+/).length;
-      if (wordCount > 12) {
-        return `✍️ **Diagnostic Atelier Argumentatif (${wordCount} mots)** :
-• Connecteurs logiques repérés : ${found.length > 0 ? found.map(f => `« ${f} »`).join(', ') + ' ✅' : 'Aucun détecté ⚠️ (ajoute *En effet*, *Néanmoins* ou *Par conséquent*)'}.
-• Conseil 11e VP : Vérifie que ton paragraphe suit la structure **Idée directrice → Argument → Exemple précis**.`;
+      const report = this.evaluateArgumentativeEssay('Atelier Argumentatif', query);
+      if (report.wordCount > 12) {
+        return `✍️ **Diagnostic Atelier Argumentatif (${report.wordCount} mots — Estimation ${report.scoreOver6.toFixed(1)}/6.0)** :
+• Connecteurs repérés : ${report.foundConnectors.length > 0 ? report.foundConnectors.map(f => `« ${f} »`).join(', ') + ' ✅' : 'Aucun détecté ⚠️ (ajoute *En effet*, *Néanmoins* ou *Par conséquent*)'}.
+• Concession / nuance : ${report.hasConcession ? 'Repérée ✅' : 'À renforcer (*Certes... toutefois...*) 💡'}.
+• Conseil PER : Vérifie la progression **Idée directrice → Argument → Exemple concret**.`;
       }
       return `✍️ **Recette du Texte Argumentatif (Certificat Vaud)** :
 1. **Intro** : Sujet amené → Sujet posé (question) → Sujet divisé (plan).
@@ -91,13 +120,61 @@ window.VaudAICoach = class VaudAICoach {
 3. **Conclusion** : Bilan + ouverture.`;
     }
 
-    if (lower.includes('allemand') || lower.includes('weil') || lower.includes('dass') || lower.includes('obwohl')) {
-      return `🇩🇪 **Tipp Allemand 11e VP** : Avec *weil*, *dass*, *obwohl* et *wenn*, le verbe conjugué part **tout à la fin** de la subordonnée. Et si la subordonnée est en tête de phrase, on inverse le sujet et le verbe après la virgule (V2) !`;
-    }
-
     return `🇨🇭 **Coach 11e VP** : Excellente question ! Pour le Certificat vaudois, veux-tu qu'on révise :
-1. La différence entre **relative et complétive** ?
-2. Les **fonctions PER** (CP, CDV, CIV) ?
-3. Ou colle un extrait de ton **texte argumentatif** pour que je l'analyse !`;
+1. La différence entre **relative et complétive** ou l'**accord du participe passé** ?
+2. Les **fonctions PER** (CP, CDV, CIV) ou les **figures de style** ?
+3. La syntaxe **allemande** (V2, Nebensatz, Perfekt, Dativ/Akkusativ) ou un **texte argumentatif** ?`;
+  }
+
+  evaluateArgumentativeEssay(promptTitle, essayText) {
+    const clean = (essayText || '').trim();
+    const lower = clean.toLowerCase();
+    const words = clean ? clean.split(/\s+/).filter(Boolean) : [];
+    const wordCount = words.length;
+
+    const connectorBank = [
+      'tout d\'abord', 'd’abord', 'en effet', 'de plus', 'en outre', 'par ailleurs',
+      'cependant', 'néanmoins', 'toutefois', 'en revanche', 'certes', 'bien que',
+      'malgré', 'ainsi', 'par conséquent', 'c\'est pourquoi', 'donc', 'en conclusion', 'finalement'
+    ];
+    const foundConnectors = connectorBank.filter(c => lower.includes(c));
+    const hasConcession = ['certes', 'bien que', 'néanmoins', 'toutefois', 'cependant', 'malgré', 'il est vrai que'].some(c => lower.includes(c));
+    const hasExample = ['par exemple', 'ainsi', 'comme', 'notamment', 'en témoigne'].some(c => lower.includes(c));
+    const hasIntroQuestion = clean.includes('?') || ['aujourd\'hui', 'aujourd’hui', 'de nos jours', 'société', 'problématique'].some(c => lower.includes(c));
+    const hasConclusion = ['en conclusion', 'pour conclure', 'en somme', 'finalement', 'bilan'].some(c => lower.includes(c));
+
+    // Estimate Swiss grade (/6.0 scale) based on structure & richness
+    let pts = 2.0;
+    if (wordCount >= 50) pts += 0.5;
+    if (wordCount >= 110) pts += 0.5;
+    if (wordCount >= 170) pts += 0.5;
+    if (foundConnectors.length >= 2) pts += 0.5;
+    if (foundConnectors.length >= 4) pts += 0.5;
+    if (hasConcession) pts += 0.5;
+    if (hasExample) pts += 0.5;
+    if (hasIntroQuestion) pts += 0.25;
+    if (hasConclusion) pts += 0.25;
+
+    const rawScore = Math.min(6.0, Math.max(1.5, pts));
+    const scoreOver6 = Math.round(rawScore * 2) / 2;
+
+    const tips = [];
+    if (wordCount < 140) tips.push(`Allonge ton texte (${wordCount}/180 mots visés au Certificat) en développant un exemple concret par argument.`);
+    if (foundConnectors.length < 3) tips.push('Ajoute davantage de connecteurs logiques (*En effet*, *De plus*, *Par conséquent*).');
+    if (!hasConcession) tips.push('Intègre un paragraphe de concession/réfutation (*Certes..., toutefois...*) très valorisé par les experts DGEO.');
+    if (!hasConclusion) tips.push('Termine par un paragraphe de conclusion clair (*En conclusion...* + phrase d’ouverture).');
+    if (tips.length === 0) tips.push('Très belle maîtrise structurelle ! Relis attentivement les accords des participes passés et la ponctuation.');
+
+    return {
+      promptTitle,
+      wordCount,
+      scoreOver6,
+      foundConnectors,
+      hasConcession,
+      hasExample,
+      hasIntroQuestion,
+      hasConclusion,
+      tips
+    };
   }
 }

@@ -1726,3 +1726,423 @@ button {
   margin-top: 4px;
 }
 
+/* ==========================================================================
+   v1.5.0: Shared Banner (#devoir / #duel), Examen Blanc Certificat & Mode Enseignant
+   ========================================================================== */
+.shared-context-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-primary);
+  font-size: 0.86rem;
+}
+
+.shared-context-banner-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.shared-context-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Active 1v1 Duel Banner inside Arena */
+.duel-live-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-primary);
+  margin-bottom: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.duel-join-box {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.duel-join-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.duel-join-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.duel-join-row .auth-input {
+  flex: 1;
+  min-width: 180px;
+  background: var(--bg-surface);
+}
+
+.duel-share-preview {
+  margin-top: 8px;
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  word-break: break-all;
+  font-family: var(--font-mono);
+}
+
+/* Mode Enseignant Builder in Paramètres */
+.teacher-devoir-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.teacher-chapters-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.teacher-chap-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.teacher-chap-pill input {
+  accent-color: var(--accent-primary);
+}
+
+.teacher-output-box {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+}
+
+.teacher-output-link {
+  flex: 1;
+  min-width: 220px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   Examen Blanc de Certificat Vaud Workspace (Viewport-Fitted Dual-Pane)
+   ========================================================================== */
+.exam-blanc-workspace {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.exam-blanc-workspace.open {
+  display: flex;
+}
+
+.exam-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.exam-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.exam-select {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.exam-part-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.exam-part-btn {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.exam-part-btn.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #ffffff;
+}
+
+.exam-timer-pill {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-primary);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--accent-primary);
+}
+
+.exam-body-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  overflow: hidden;
+}
+
+.exam-passage-pane,
+.exam-questions-pane,
+.exam-writing-pane {
+  padding: 16px 18px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.exam-passage-pane {
+  border-right: 1px solid var(--border-color);
+  background: var(--bg-primary);
+}
+
+.exam-passage-title {
+  font-size: 1.02rem;
+  font-weight: 800;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.exam-passage-author {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.exam-passage-text {
+  font-size: 0.9rem;
+  line-height: 1.65;
+  white-space: pre-line;
+  color: var(--text-primary);
+}
+
+.exam-question-item {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  margin-bottom: 12px;
+}
+
+.exam-q-prompt {
+  font-size: 0.88rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.exam-q-sentence {
+  font-size: 0.83rem;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+}
+
+.exam-q-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.exam-opt-btn {
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.exam-opt-btn.selected {
+  border-color: var(--accent-primary);
+  background: var(--accent-soft);
+  font-weight: 700;
+}
+
+.exam-opt-btn.correct {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.14);
+  font-weight: 700;
+}
+
+.exam-opt-btn.wrong {
+  border-color: #f43f5e;
+  background: rgba(244, 63, 94, 0.12);
+}
+
+.exam-q-explanation {
+  margin-top: 8px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+}
+
+.exam-writing-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.exam-essay-prompt-box {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  font-size: 0.88rem;
+}
+
+.exam-essay-textarea {
+  width: 100%;
+  min-height: 150px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  resize: vertical;
+  color: var(--text-primary);
+}
+
+.exam-rubric-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.exam-rubric-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.exam-coach-report {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-primary);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.exam-footer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.exam-grade-pill {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 0.84rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+}
+
+.exam-grade-pill.pass {
+  border-color: #10b981;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+}
+
+@media (max-width: 900px) {
+  .exam-body-grid {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+  .exam-passage-pane {
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+}
+
+

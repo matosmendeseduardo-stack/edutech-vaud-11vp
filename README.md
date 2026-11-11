@@ -1,41 +1,46 @@
-# 🇨🇭 Objectif Gymnase — 11e VP Vaud (`v1.1.0`)
+# 🇨🇭 Objectif Gymnase — 11e VP Vaud (`v1.5.0`)
 
 Plateforme d'étude interactive **100 % gratuite et open-source** dédiée aux élèves de **11e VP (Voie Prégymnasiale)** dans le **Canton de Vaud (Suisse)**, alignée sur le **Plan d'études romand (PER)** et les exigences des **Examens de certificat (DGEO Vaud)**.
 
+- 🌐 **Application en ligne** : https://edutech-vaud-11vp.web.app *(domaine personnalisé prévu : `edutech.emtechnica.ch`)*
+- 🔥 **Infrastructure** : Firebase Hosting, Firebase Auth (Pseudonyme nLPD / Email / Google) & Cloud Firestore (`eur3`)
+
 ---
 
-## ✨ Fonctionnalités Principales (`v1.1.0`)
+## ✨ Fonctionnalités Principales (`v1.5.0`)
 
-1. **Programme Officiel Français 11e VP (PER L1 31–38)** :
+1. **Programme Officiel Français 11e VP (7 Chapitres PER L1 31–38)** :
    - 🧩 **Propositions Subordonnées** : Relatives, complétives conjonctives, interrogatives indirectes et circonstancielles.
    - 📐 **Fonctions Syntaxiques PER** : Terminologie officielle romande (*Complément de phrase CP*, *CDV*, *CIV*, *Attribut du sujet*, *Modificateur du nom*).
-   - 💬 **Discours Rapporté & Énonciation** : Transposition du discours direct au discours indirect, concordance des temps, repères spatio-temporels et discours indirect libre.
-   - ⏳ **Conjugaison & Valeurs des Temps** : Imparfait d'arrière-plan vs Passé simple de premier plan, valeurs du Présent et du Conditionnel, Subjonctif.
+   - 💬 **Discours Rapporté & Énonciation** : Transposition direct/indirect, concordance des temps, repères spatio-temporels et discours indirect libre.
+   - ⏳ **Conjugaison & Valeurs des Temps** : Imparfait d'arrière-plan vs Passé simple de premier plan, valeurs du Présent et du Conditionnel, Subjonctif, Plus-que-parfait.
    - 🎭 **Figures de Style & Analyse Littéraire** : Métaphore, comparaison, oxymore, antithèse, anaphore, hyperbole, litote, euphémisme, personnification.
    - ✍️ **Atelier Texte Argumentatif (Spécial Certificat)** : Introduction en 3 étapes (sujet amené, posé, divisé), connecteurs logiques, concession et réfutation.
-2. **Inspiré des Meilleures Plateformes d'Apprentissage** :
-   - 📖 **Aide-Mémoire PER intégré (*Khan Academy*)** : Fiche de théorie officielle consultable en un clic au-dessus de chaque exercice.
-   - 🔁 **Répétition Espacée « Mes erreurs » (*Anki / Projet Voltaire*)** : Les questions ratées rejoignent automatiquement une file d'attente personnalisée jusqu'à leur maîtrise.
-   - ✂️ **Chirurgie de la Phrase (*Projet Voltaire*)** : Identification interactive par clic direct sur les segments de la phrase.
-   - ⚡ **Sprint Chrono 60s & Quête du Léman (*Duolingo*)** : Progression par XP de *Nyon → Morges → Lausanne → Vevey → Montreux*.
-3. **Paramétrage Complet (`⚙️ Paramètres & Focus`)** :
-   - **3 Thèmes Visuels au choix** : *Lausanne Neo-Academic*, *Vaud Quest Map* et *Minimalist Focus Studio*.
-   - **Sélection des Branches** : *Français 11e VP* + option *Allemand 11e VP (Aperçu)*.
-   - **Filtre de Chapitres Ciblés** : L'élève coche uniquement les chapitres de son prochain test.
-4. **Générateur Procédural Infini & Coach IA Gratuit** :
-   - Génération dynamique de nouveaux exercices vérifiés (`PERExerciseGenerator`) sans frais de serveur.
-   - Coach IA intégré pour expliquer les règles PER et diagnostiquer les paragraphes argumentatifs.
+   - ✒️ **Orthographe & Participe Passé (PER L1 37)** : Auxiliaires *être*, *avoir* (CDV antéposé, pronom *en*), verbes pronominaux & **Dictées interactives / Repérage de fautes**.
+2. **Programme Complet Allemand 11e VP (4 Chapitres PER L2)** :
+   - 🇩🇪 *Hauptsatz (V2) & Nebensätze (weil, dass, obwohl, wenn, als)*
+   - ⏱️ *Perfekt (haben/sein + Partizip II) & Präteritum (Modaux)*
+   - 🧭 *Kasus (Nominativ, Akkusativ, Dativ) & Wechselpräpositionen*
+   - 🗣️ *Wortschatz & Redewendungen 11e VP*
+3. **Simulation « Examen Blanc de Certificat Vaud »** :
+   - 2 épreuves complètes chronométrées (45 min) avec **Partie 1** (Compréhension & Langue — note suisse `/6.0`) et **Partie 2** (Rédaction argumentative, grille DGEO et évaluation par le **Coach IA**).
+4. **Duels Multijoueurs (`#duel=...`), Mode Enseignant (`#devoir=...`) & Répétition Espacée** :
+   - Encodage des 5 mêmes questions par URL `#duel=...` ou code Cloud Firestore, file automatique **« 🔁 Erreurs »**, **Coach IA fixe/sticky** et **Mode Enseignant** pour partager un devoir de classe ciblé.
+5. **Paramétrage & Conformité nLPD** :
+   - 3 thèmes visuels (*Neo-Academic*, *Vaud Quest Map*, *Minimalist Focus Studio*), fonctionnement *Local-First* hors-ligne ou synchronisation Cloud Firebase.
 
 ---
 
-## 🚀 Déploiement Gratuit sur GitHub Pages
-
-Ce dépôt inclut un workflow GitHub Actions (`.github/workflows/deploy-pages.yml`) qui publie automatiquement le site sur **GitHub Pages** à chaque `git push` sur la branche `main`.
+## 🚀 Déploiement (Firebase Hosting & GitHub)
 
 ### Lancer en local
-Ouvrez simplement `index.html` dans votre navigateur ou lancez :
 ```bash
 python3 -m http.server 8080
+```
+
+### Déployer sur Firebase
+```bash
+firebase deploy --only firestore,hosting --project edutech-vaud-11vp
 ```
 
 ---
