@@ -10,8 +10,8 @@ rules_version = '2';
 // Document ID: {userId} (matches request.auth.uid)
 // Fields:
 //   - pseudo: string (required, 1..40 chars) - Student pseudonym (no PII)
-//   - etablissement: string (optional, 0..100 chars) - Vaud school name
-//   - avatar: string (optional, 0..16 chars) - Student emoji avatar
+//   - etablissement: string (required, 0..100 chars) - Vaud school name
+//   - avatar: string (required, 0..16 chars) - Student emoji avatar
 //   - xp: int (required, 0..10000000) - Total experience points
 //   - streak: int (required, 0..10000) - Consecutive study days
 //   - answeredCount: int (required, 0..1000000) - Total questions answered
@@ -20,6 +20,9 @@ rules_version = '2';
 //   - enabledSubjects: list (required, max 10 items) - Enabled subject keys
 //   - focusedModules: list (required, max 50 items) - Active PER chapter IDs
 //   - updatedAt: timestamp (required) - Last profile sync timestamp
+//   - role: string (optional, 'eleve' | 'enseignant' | 'admin') - User role in school ecosystem
+//   - moduleProgress: map (optional, max 30 keys) - Per-chapter mastery map (0..100)
+//   - inviteCode: string (optional, 0..64 chars) - Invitation code used during onboarding
 //
 // Subcollection: profiles/{userId}/mistakes
 // Document ID: {questionId}
@@ -58,6 +61,20 @@ rules_version = '2';
 //   - createdAt: timestamp (optional, immutable) - Creation timestamp
 //   - updatedAt: timestamp (optional) - Last update timestamp
 //
+// Collection: invitations
+// Document ID: {inviteId} (unique invite token, 3..64 chars)
+// Fields:
+//   - code: string (required, 3..64 chars) - Matches inviteId
+//   - inviteeName: string (required, 1..40 chars) - Student / Teacher name
+//   - inviteeEmail: string (required, 0..80 chars) - Contact email
+//   - role: string (required, 'eleve' | 'enseignant' | 'admin') - Assigned role
+//   - etablissement: string (required, 0..100 chars) - Vaud school name
+//   - focusedModules: list (required, 1..30 items) - Assigned study modules
+//   - status: string (required, 'pending' | 'accepted') - Invitation lifecycle state
+//   - createdBy: string (required, 1..128 chars) - Creator UID / pseudo
+//   - acceptedByUid: string (optional, 0..128 chars) - UID of user who redeemed invite
+//   - updatedAt: timestamp (required) - Timestamp matching request.time
+//
 // ===============================================================
 
 service cloud.firestore {
@@ -72,9 +89,21 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Alias for isAuthenticated
+    function isSignedIn() {
+      return isAuthenticated();
+    }
+
     // Check if user owns the resource based on path userId
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Check if the authenticated caller has the admin role in their profile
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('role', 'eleve') == 'admin';
     }
 
     // Validate required fields exist on the incoming document
@@ -133,16 +162,17 @@ service cloud.firestore {
 
     function isValidProfile(data) {
       return hasRequiredFields([
-          'pseudo', 'xp', 'streak', 'answeredCount', 'correctCount',
-          'vibe', 'enabledSubjects', 'focusedModules', 'updatedAt'
-        ]) &&
-        hasOnlyAllowedFields([
           'pseudo', 'etablissement', 'avatar', 'xp', 'streak', 'answeredCount',
           'correctCount', 'vibe', 'enabledSubjects', 'focusedModules', 'updatedAt'
         ]) &&
+        hasOnlyAllowedFields([
+          'pseudo', 'etablissement', 'avatar', 'xp', 'streak', 'answeredCount',
+          'correctCount', 'vibe', 'enabledSubjects', 'focusedModules', 'updatedAt',
+          'role', 'moduleProgress', 'inviteCode'
+        ]) &&
         validStringLength('pseudo', 1, 40) &&
-        isValidOptionalString('etablissement', 0, 100) &&
-        isValidOptionalString('avatar', 0, 16) &&
+        validStringLength('etablissement', 0, 100) &&
+        validStringLength('avatar', 0, 16) &&
         isValidNonNegativeInt('xp', 10000000) &&
         isValidNonNegativeInt('streak', 10000) &&
         isValidNonNegativeInt('answeredCount', 1000000) &&
@@ -153,7 +183,10 @@ service cloud.firestore {
         data.enabledSubjects.size() >= 1 &&
         isValidList(data.focusedModules, 50) &&
         data.focusedModules.size() >= 1 &&
-        data.updatedAt is timestamp;
+        data.updatedAt is timestamp &&
+        (!('role' in data) || data.role in ['eleve', 'enseignant', 'admin']) &&
+        (!('moduleProgress' in data) || (data.moduleProgress is map && data.moduleProgress.size() <= 30)) &&
+        (!('inviteCode' in data) || (data.inviteCode is string && data.inviteCode.size() <= 64));
     }
 
     function isValidMistake(data) {
@@ -200,6 +233,28 @@ service cloud.firestore {
         (!('updatedAt' in data) || data.updatedAt is timestamp);
     }
 
+    function isValidInvitation(data, inviteId) {
+      return inviteId.size() >= 3 && inviteId.size() <= 64 &&
+        data.keys().hasAll([
+          'code', 'inviteeName', 'inviteeEmail', 'role', 'etablissement',
+          'focusedModules', 'status', 'createdBy', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'code', 'inviteeName', 'inviteeEmail', 'role', 'etablissement',
+          'focusedModules', 'status', 'createdBy', 'acceptedByUid', 'updatedAt'
+        ]) &&
+        data.code is string && data.code == inviteId &&
+        data.inviteeName is string && data.inviteeName.size() >= 1 && data.inviteeName.size() <= 40 &&
+        data.inviteeEmail is string && data.inviteeEmail.size() <= 80 &&
+        data.role in ['eleve', 'enseignant', 'admin'] &&
+        data.etablissement is string && data.etablissement.size() <= 100 &&
+        data.focusedModules is list && data.focusedModules.size() >= 1 && data.focusedModules.size() <= 30 &&
+        data.status in ['pending', 'accepted'] &&
+        data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+        (!('acceptedByUid' in data) || (data.acceptedByUid is string && data.acceptedByUid.size() <= 128)) &&
+        data.updatedAt == request.time;
+    }
+
     // ===============================================================
     // Collection Rules
     // ===============================================================
@@ -208,8 +263,8 @@ service cloud.firestore {
     match /profiles/{userId} {
       allow read: if true;
       allow create: if isOwner(userId) && isValidProfile(request.resource.data);
-      allow update: if isOwner(userId) && isValidProfile(request.resource.data);
-      allow delete: if isOwner(userId);
+      allow update: if (isOwner(userId) || isAdmin()) && isValidProfile(request.resource.data);
+      allow delete: if isOwner(userId) || isAdmin();
 
       // 2. Student Personal Spaced Repetition Mistake Queue ("Mes erreurs")
       match /mistakes/{questionId} {
@@ -217,7 +272,7 @@ service cloud.firestore {
         allow create: if isOwner(userId) && isValidMistake(request.resource.data);
         allow update: if isOwner(userId) && isValidMistake(request.resource.data) &&
           areImmutableFieldsUnchanged(['id', 'addedAt']);
-        allow delete: if isOwner(userId);
+        allow delete: if isOwner(userId) || isAdmin();
       }
     }
 
@@ -255,6 +310,13 @@ service cloud.firestore {
         );
 
       allow delete: if false;
+    }
+
+    // 5. School & Admin Invitations (#invite=...)
+    match /invitations/{inviteId} {
+      allow get, list: if true;
+      allow create, update: if isSignedIn() && isValidInvitation(request.resource.data, inviteId);
+      allow delete: if isSignedIn();
     }
 
     // Default Deny for all other paths
