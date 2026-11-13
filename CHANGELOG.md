@@ -4,6 +4,15 @@ Toutes les évolutions notables de la plateforme gratuite d'étude pour la **11e
 
 ---
 
+## [v1.5.1] — 2026-11-13
+### Corrigé & Durci (Revue QA Navigateur Chrome & Sécurité)
+- **☁️ Synchronisation Profil Firestore (`js/firebase-service.js`)** : Valeurs par défaut non vides (`enabledSubjects`, `focusedModules`), normalisation des bornes et `correctCount <= answeredCount` dans `syncProfile()` afin de respecter `firestore.rules` dès la première session.
+- **🔐 Connexion Google (`signInWithGoogle`)** : Traduction en français des erreurs `auth/operation-not-allowed`, `auth/popup-blocked` et `auth/popup-closed-by-user`, et synchronisation immédiate du profil après connexion.
+- **⚔️ Bouton Duel & Presse-papiers (`js/app.js`)** : Capture synchrone de `e.currentTarget` avant `await createCloudDuel(...)` sur `#copy-duel-btn` (évite un `TypeError` sur `null`) et ajout de `copyTextSafe()` pour éviter tout rejet non géré de `navigator.clipboard.writeText()`.
+- **📐 Ergonomie Laptop & Favicon (`css/styles.css`, `index.html`)** : Barre supérieure sur une seule ligne (`>= 921px`), hauteur adaptée pour garder `#next-question-btn` et `.sticky-ai-card` visibles sans défilement à `1366×753` (y compris avec bannière `#duel=` / `#devoir=`), et favicon SVG intégré (suppression du `404` sur `/favicon.ico`).
+
+---
+
 ## [v1.5.0] — 2026-11-12
 ### Ajouté (Programme Complet FR + DE, Examen Blanc Certificat, Duels URL & Mode Enseignant)
 - **🎓 Mode « Examen Blanc de Certificat Vaud » (`window.CERTIFICAT_MOCK_EXAMS`, `#exam-blanc-workspace`)** :

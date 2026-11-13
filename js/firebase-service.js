@@ -159,8 +159,32 @@ window.VaudFirebaseService = class VaudFirebaseService {
       throw new Error('Configurez le projet Firebase ou utilisez la connexion rapide par Pseudo.');
     }
     const provider = new this.sdk.GoogleAuthProvider();
-    const cred = await this.sdk.signInWithPopup(this.auth, provider);
-    return cred.user;
+    try {
+      const cred = await this.sdk.signInWithPopup(this.auth, provider);
+      this.currentUser = {
+        uid: cred.user.uid,
+        email: cred.user.email || '',
+        pseudo: (cred.user.displayName || cred.user.email?.split('@')[0] || 'Élève 11e VP').slice(0, 40),
+        etablissement: 'Canton de Vaud',
+        avatar: '⚡',
+        isAnonymous: false,
+        isCloud: true
+      };
+      await this.syncProfile();
+      return cred.user;
+    } catch (err) {
+      const code = err?.code || '';
+      if (code === 'auth/operation-not-allowed') {
+        throw new Error('Connexion Google non activée sur ce projet — utilise ton Pseudo ou Email.');
+      }
+      if (code === 'auth/popup-blocked') {
+        throw new Error('Fenêtre Google bloquée par le navigateur — autorise les popups ou utilise Email/Pseudo.');
+      }
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+        throw new Error('Connexion Google annulée.');
+      }
+      throw new Error(err?.message || 'Erreur lors de la connexion Google.');
+    }
   }
 
   async signOutUser() {
@@ -192,17 +216,65 @@ window.VaudFirebaseService = class VaudFirebaseService {
 
     try {
       const ref = this.sdk.doc(this.db, 'profiles', this.currentUser.uid);
+      const safeParseArr = (key, fallback) => {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(key) || 'null');
+          return Array.isArray(parsed) ? parsed : fallback;
+        } catch {
+          return fallback;
+        }
+      };
+      const defaultSubjects = ['francais', 'allemand'];
+      const defaultFocused = ['subordonnees', 'fonctions', 'discours', 'conjugaison', 'figures', 'argumentation', 'orthographe'];
+
+      const rawSubjects = Array.isArray(statePatch.enabledSubjects)
+        ? statePatch.enabledSubjects
+        : safeParseArr('vaud_enabled_subjects', defaultSubjects);
+      const enabledSubjects = rawSubjects.filter(s => typeof s === 'string' && s.length > 0).slice(0, 10);
+
+      const rawFocused = Array.isArray(statePatch.focusedModules)
+        ? statePatch.focusedModules
+        : safeParseArr('vaud_focused_modules', defaultFocused);
+      const focusedModules = rawFocused.filter(m => typeof m === 'string' && m.length > 0).slice(0, 30);
+
+      const rawAnswered = typeof statePatch.answeredCount === 'number'
+        ? statePatch.answeredCount
+        : parseInt(localStorage.getItem('vaud_answered') || '18', 10);
+      const answeredCount = Math.max(0, Math.min(1000000, Number.isFinite(rawAnswered) ? Math.round(rawAnswered) : 0));
+
+      const rawCorrect = typeof statePatch.correctCount === 'number'
+        ? statePatch.correctCount
+        : parseInt(localStorage.getItem('vaud_correct') || '15', 10);
+      const correctCount = Math.max(0, Math.min(answeredCount, Number.isFinite(rawCorrect) ? Math.round(rawCorrect) : 0));
+
+      const rawXp = typeof statePatch.xp === 'number'
+        ? statePatch.xp
+        : parseInt(localStorage.getItem('vaud_xp') || '340', 10);
+      const xp = Math.max(0, Math.min(10000000, Number.isFinite(rawXp) ? Math.round(rawXp) : 0));
+
+      const rawStreak = typeof statePatch.streak === 'number'
+        ? statePatch.streak
+        : parseInt(localStorage.getItem('vaud_streak') || '5', 10);
+      const streak = Math.max(0, Math.min(3650, Number.isFinite(rawStreak) ? Math.round(rawStreak) : 0));
+
+      const rawVibe = statePatch.vibe || localStorage.getItem('vaud_vibe') || 'academic';
+      const vibe = ['academic', 'quest', 'studio'].includes(rawVibe) ? rawVibe : 'academic';
+
+      const pseudo = String(this.currentUser.pseudo || 'Élève 11e VP').trim().slice(0, 40) || 'Élève 11e VP';
+      const etablissement = String(this.currentUser.etablissement || 'Canton de Vaud').trim().slice(0, 100);
+      const avatar = String(this.currentUser.avatar || '⚡').trim().slice(0, 16) || '⚡';
+
       const payload = {
-        pseudo: this.currentUser.pseudo || 'Élève 11e VP',
-        etablissement: this.currentUser.etablissement || 'Canton de Vaud',
-        avatar: this.currentUser.avatar || '⚡',
-        xp: typeof statePatch.xp === 'number' ? statePatch.xp : parseInt(localStorage.getItem('vaud_xp') || '340', 10),
-        streak: typeof statePatch.streak === 'number' ? statePatch.streak : parseInt(localStorage.getItem('vaud_streak') || '5', 10),
-        answeredCount: typeof statePatch.answeredCount === 'number' ? statePatch.answeredCount : parseInt(localStorage.getItem('vaud_answered') || '18', 10),
-        correctCount: typeof statePatch.correctCount === 'number' ? statePatch.correctCount : parseInt(localStorage.getItem('vaud_correct') || '15', 10),
-        vibe: statePatch.vibe || localStorage.getItem('vaud_vibe') || 'academic',
-        enabledSubjects: statePatch.enabledSubjects || JSON.parse(localStorage.getItem('vaud_enabled_subjects') || '["francais","allemand"]'),
-        focusedModules: statePatch.focusedModules || JSON.parse(localStorage.getItem('vaud_focused_modules') || '[]'),
+        pseudo,
+        etablissement,
+        avatar,
+        xp,
+        streak,
+        answeredCount,
+        correctCount,
+        vibe,
+        enabledSubjects: enabledSubjects.length > 0 ? enabledSubjects : defaultSubjects,
+        focusedModules: focusedModules.length > 0 ? focusedModules : defaultFocused,
         updatedAt: this.sdk.serverTimestamp()
       };
       await this.sdk.setDoc(ref, payload, { merge: true });

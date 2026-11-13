@@ -136,21 +136,23 @@ button {
 }
 
 .top-navbar-inner {
-  max-width: 1140px;
+  max-width: 1220px;
   margin: 0 auto;
-  padding: 8px 20px;
+  padding: 6px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
+  gap: 10px;
+  flex-wrap: nowrap;
 }
 
 .brand-trigger {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   text-align: left;
+  flex-shrink: 0;
+  white-space: nowrap;
   transition: opacity 0.15s ease;
 }
 
@@ -159,13 +161,13 @@ button {
 }
 
 .brand-logo {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
   background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
   color: #ffffff;
   font-weight: 800;
-  font-size: 0.9rem;
+  font-size: 0.86rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -207,9 +209,9 @@ button {
 }
 
 .main-tab {
-  padding: 6px 13px;
+  padding: 5px 11px;
   border-radius: 999px;
-  font-size: 0.82rem;
+  font-size: 0.79rem;
   font-weight: 700;
   color: var(--text-secondary);
   display: inline-flex;
@@ -233,19 +235,21 @@ button {
 .user-stats-pills {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .stat-pill {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 11px;
+  gap: 4px;
+  padding: 4px 10px;
   border-radius: 999px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  font-size: 0.8rem;
+  font-size: 0.77rem;
   font-weight: 700;
+  white-space: nowrap;
   box-shadow: var(--shadow-sm);
 }
 
@@ -262,12 +266,12 @@ button {
    ========================================================================== */
 .workspace-layout {
   width: 100%;
-  max-width: 1140px;
+  max-width: 1220px;
   margin: 0 auto;
-  padding: 14px 20px 24px;
+  padding: 10px 20px 16px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 310px;
-  gap: 20px;
+  gap: 18px;
   align-items: start;
   flex: 1;
 }
@@ -298,8 +302,8 @@ button {
    ========================================================================== */
 .sticky-ai-rail {
   position: sticky;
-  top: 68px;
-  height: calc(100vh - 84px);
+  top: 58px;
+  height: calc(100vh - 76px);
   display: flex;
   flex-direction: column;
 }
@@ -436,6 +440,9 @@ button {
 }
 
 @media (max-width: 920px) {
+  .top-navbar-inner {
+    flex-wrap: wrap;
+  }
   .workspace-layout {
     grid-template-columns: 1fr;
   }
@@ -876,12 +883,16 @@ button {
    Fits inside calc(100vh - 84px) so "Question suivante ->" is ALWAYS in frame
    ========================================================================== */
 #view-entrainement.active {
-  height: calc(100vh - 84px);
-  min-height: 460px;
+  height: calc(100vh - 76px);
+  min-height: 440px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   overflow: hidden;
+}
+
+.single-focus-shell:has(.shared-context-banner[style*="flex"]) #view-entrainement.active {
+  height: calc(100vh - 134px);
 }
 
 .lesson-topbar {
@@ -935,12 +946,12 @@ button {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: 14px 18px;
+  padding: 12px 16px;
   box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   position: relative;
   overflow: hidden;
 }
@@ -949,8 +960,8 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding-bottom: 10px;
+  gap: 8px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--border-color);
   flex-wrap: wrap;
   flex-shrink: 0;
@@ -1548,16 +1559,26 @@ button {
 .auth-profile-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
+  gap: 5px;
+  padding: 4px 11px;
   border-radius: 999px;
   background: var(--accent-soft);
   border: 1px solid var(--accent-primary);
   color: var(--accent-primary);
-  font-size: 0.8rem;
+  font-size: 0.77rem;
   font-weight: 700;
+  max-width: 190px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   box-shadow: var(--shadow-sm);
   transition: all 0.15s ease;
+}
+
+.auth-profile-pill #user-auth-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .auth-profile-pill:hover {

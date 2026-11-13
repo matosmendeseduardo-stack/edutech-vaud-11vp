@@ -493,6 +493,14 @@ class ObjectifGymnaseApp {
     });
   }
 
+  copyTextSafe(text) {
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        navigator.clipboard.writeText(text).catch(() => {});
+      }
+    } catch (e) {}
+  }
+
   /* ------------------------------------------------------------------------
      Single-Focus Progressive Disclosure Navigation (4 Clean Views)
      ------------------------------------------------------------------------ */
@@ -1742,6 +1750,7 @@ class ObjectifGymnaseApp {
 
     // View 3: Défis & Famille Actions (URL-Encoded #duel=... & Cloud Firestore Duels)
     document.getElementById('copy-duel-btn')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
       const activeMod = this.getActiveModule();
       const modId = activeMod?.id || 'subordonnees';
       const modTitle = activeMod?.title || 'Programme PER';
@@ -1765,7 +1774,7 @@ class ObjectifGymnaseApp {
       const base = `${window.location.origin}${window.location.pathname}`;
       const shareUrl = `${base}#duel=${this.encodeSharePayload(payload)}`;
       const duelText = `⚔️ Duel Objectif Gymnase (11e VP Vaud) ! Rejoins mon défi ${this.state.duelCode} sur « ${modTitle.split('(')[0].trim()} » : ${shareUrl}`;
-      navigator.clipboard?.writeText(shareUrl);
+      this.copyTextSafe(shareUrl);
 
       const previewEl = document.getElementById('duel-share-preview');
       if (previewEl) {
@@ -1773,10 +1782,11 @@ class ObjectifGymnaseApp {
         previewEl.textContent = duelText;
       }
 
-      const btn = e.currentTarget;
-      const orig = btn.textContent;
-      btn.textContent = '✅ Lien Duel (#duel=...) copié !';
-      setTimeout(() => { btn.textContent = orig; }, 2500);
+      if (btn) {
+        const orig = btn.textContent;
+        btn.textContent = '✅ Lien Duel (#duel=...) copié !';
+        setTimeout(() => { btn.textContent = orig; }, 2500);
+      }
     });
 
     document.getElementById('join-duel-btn')?.addEventListener('click', async () => {
@@ -1838,7 +1848,7 @@ class ObjectifGymnaseApp {
       const modTitle = this.getActiveModule()?.title || 'Programme PER';
       const studentLabel = this.state.currentUser ? `${this.state.currentUser.pseudo} (${this.state.currentUser.etablissement})` : 'Élève 11e VP';
       const shareText = `🇨🇭 Bilan 11e VP — ${studentLabel} (Objectif Gymnase) :\n✅ ${this.state.xp} XP gagnés\n🎯 ${accuracy}% de réussite sur le programme PER (${modTitle})\n🔥 Série de ${this.state.streak} jours consécutifs !`;
-      navigator.clipboard?.writeText(shareText);
+      this.copyTextSafe(shareText);
       const btn = e.currentTarget;
       const orig = btn.textContent;
       btn.textContent = '✅ Résumé copié pour WhatsApp !';
@@ -1856,7 +1866,7 @@ class ObjectifGymnaseApp {
       const url = this.buildTeacherShareUrl();
       const previewEl = document.getElementById('teacher-devoir-link-preview');
       if (previewEl) previewEl.textContent = url;
-      navigator.clipboard?.writeText(url);
+      this.copyTextSafe(url);
       const btn = e.currentTarget;
       const orig = btn.textContent;
       btn.textContent = '✅ Lien Devoir copié !';
