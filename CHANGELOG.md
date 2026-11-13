@@ -4,6 +4,21 @@ Toutes les évolutions notables de la plateforme gratuite d'étude pour la **11e
 
 ---
 
+## [v1.6.0] — 2026-11-13
+### Ajouté & Repensé (Console Admin, Invitations Utilisateurs & Démarrage Vierge 0%)
+- **🌱 Démarrage 100 % Vierge (« Mon Parcours à Construire » — `0 XP • 0%`)** :
+  - Suppression de toutes les données factices pré-remplies (`340 XP`, `5 j.`, `18` réponses, `INITIAL_LEADERBOARD` fictif, bouton « Simuler un duel contre Léo » et pourcentages statiques).
+  - Ajout de la carte d’embarquement en 3 étapes (`#fresh-start-builder-card`) avec sélecteur rapide de chapitres (`#path-quick-chapters`) et progression dynamique par chapitre (`moduleProgress` `0% → 100%`) persistée en local et dans Cloud Firestore.
+- **🛡️ Console d’Administration (`#view-admin`, onglet `🛡️ Admin`)** :
+  - Tableau de revue des utilisateurs inscrits dans Cloud Firestore (`/profiles`) avec recherche instantanée, suivi réel (`XP`, série, réponses, précision, chapitres ciblés), remise à zéro (`🧹 0 XP`), suppression individuelle et purge 1-clic des comptes de test (`🗑️ Purger comptes test QA`).
+- **✉️ Système d’Invitations (`#invite=...` & collection Firestore `/invitations/{code}`)** :
+  - Formulaire d’invitation permettant d’inviter un élève, enseignant ou administrateur avec son école et ses chapitres PER pré-ciblés.
+  - Génération de lien 1-clic `#invite=...` qui embarque l’utilisateur invité avec un compteur vierge (`0 XP`, `0%`) prêt à construire son parcours, et met à jour le statut de l’invitation (`⏳ En attente` → `✅ Acceptée`).
+- **🔒 Règles Firestore (`firestore.rules`)** :
+  - Ajout de `isAdmin()`, prise en charge de `role`, `moduleProgress` et `inviteCode` sur `/profiles/{userId}`, et règles de sécurité complètes pour `/invitations/{inviteId}`.
+
+---
+
 ## [v1.5.1] — 2026-11-13
 ### Corrigé & Durci (Revue QA Navigateur Chrome & Sécurité)
 - **☁️ Synchronisation Profil Firestore (`js/firebase-service.js`)** : Valeurs par défaut non vides (`enabledSubjects`, `focusedModules`), normalisation des bornes et `correctCount <= answeredCount` dans `syncProfile()` afin de respecter `firestore.rules` dès la première session.

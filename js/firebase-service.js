@@ -239,22 +239,22 @@ window.VaudFirebaseService = class VaudFirebaseService {
 
       const rawAnswered = typeof statePatch.answeredCount === 'number'
         ? statePatch.answeredCount
-        : parseInt(localStorage.getItem('vaud_answered') || '18', 10);
+        : parseInt(localStorage.getItem('vaud_answered') || '0', 10);
       const answeredCount = Math.max(0, Math.min(1000000, Number.isFinite(rawAnswered) ? Math.round(rawAnswered) : 0));
 
       const rawCorrect = typeof statePatch.correctCount === 'number'
         ? statePatch.correctCount
-        : parseInt(localStorage.getItem('vaud_correct') || '15', 10);
+        : parseInt(localStorage.getItem('vaud_correct') || '0', 10);
       const correctCount = Math.max(0, Math.min(answeredCount, Number.isFinite(rawCorrect) ? Math.round(rawCorrect) : 0));
 
       const rawXp = typeof statePatch.xp === 'number'
         ? statePatch.xp
-        : parseInt(localStorage.getItem('vaud_xp') || '340', 10);
+        : parseInt(localStorage.getItem('vaud_xp') || '0', 10);
       const xp = Math.max(0, Math.min(10000000, Number.isFinite(rawXp) ? Math.round(rawXp) : 0));
 
       const rawStreak = typeof statePatch.streak === 'number'
         ? statePatch.streak
-        : parseInt(localStorage.getItem('vaud_streak') || '5', 10);
+        : parseInt(localStorage.getItem('vaud_streak') || '0', 10);
       const streak = Math.max(0, Math.min(3650, Number.isFinite(rawStreak) ? Math.round(rawStreak) : 0));
 
       const rawVibe = statePatch.vibe || localStorage.getItem('vaud_vibe') || 'academic';
@@ -263,6 +263,19 @@ window.VaudFirebaseService = class VaudFirebaseService {
       const pseudo = String(this.currentUser.pseudo || 'Élève 11e VP').trim().slice(0, 40) || 'Élève 11e VP';
       const etablissement = String(this.currentUser.etablissement || 'Canton de Vaud').trim().slice(0, 100);
       const avatar = String(this.currentUser.avatar || '⚡').trim().slice(0, 16) || '⚡';
+      const rawRole = statePatch.role || this.currentUser.role || localStorage.getItem('vaud_role') || 'eleve';
+      const role = ['eleve', 'enseignant', 'admin'].includes(rawRole) ? rawRole : 'eleve';
+
+      let moduleProgress = {};
+      try {
+        const rawModProg = statePatch.moduleProgress || JSON.parse(localStorage.getItem('vaud_module_progress') || '{}');
+        if (rawModProg && typeof rawModProg === 'object' && !Array.isArray(rawModProg)) {
+          Object.keys(rawModProg).slice(0, 30).forEach(k => {
+            const v = Number(rawModProg[k]);
+            if (Number.isFinite(v)) moduleProgress[k] = Math.max(0, Math.min(100, Math.round(v)));
+          });
+        }
+      } catch {}
 
       const payload = {
         pseudo,
@@ -273,10 +286,16 @@ window.VaudFirebaseService = class VaudFirebaseService {
         answeredCount,
         correctCount,
         vibe,
+        role,
+        moduleProgress,
         enabledSubjects: enabledSubjects.length > 0 ? enabledSubjects : defaultSubjects,
         focusedModules: focusedModules.length > 0 ? focusedModules : defaultFocused,
         updatedAt: this.sdk.serverTimestamp()
       };
+      const inviteCode = String(statePatch.inviteCode || this.currentUser.inviteCode || localStorage.getItem('vaud_invite_code') || '').trim().slice(0, 64);
+      if (inviteCode) {
+        payload.inviteCode = inviteCode;
+      }
       await this.sdk.setDoc(ref, payload, { merge: true });
     } catch (e) {
       console.warn('Cloud profile sync skipped:', e.message);
@@ -299,14 +318,200 @@ window.VaudFirebaseService = class VaudFirebaseService {
           uid: d.id,
           name: `${data.pseudo} (${data.etablissement || 'Vaud'})`,
           xp: data.xp || 0,
-          streak: data.streak || 1,
+          streak: data.streak || 0,
           avatar: data.avatar || '⚡',
           isMe: this.currentUser && d.id === this.currentUser.uid
         });
       });
-      return rows.length ? rows : null;
+      return rows;
     } catch (e) {
       return null;
+    }
+  }
+
+  /* ------------------------------------------------------------------------
+     v1.6.0: Admin Console (Review Users, Reset/Purge & Cloud Invitations)
+     ------------------------------------------------------------------------ */
+  async fetchAllProfiles(limitCount = 100) {
+    if (!this.isCloudConnected || !this.db) return [];
+    try {
+      const q = this.sdk.query(
+        this.sdk.collection(this.db, 'profiles'),
+        this.sdk.orderBy('xp', 'desc'),
+        this.sdk.limit(limitCount)
+      );
+      const snap = await this.sdk.getDocs(q);
+      const profiles = [];
+      snap.forEach(d => {
+        const data = d.data();
+        profiles.push({
+          uid: d.id,
+          pseudo: data.pseudo || 'Élève 11e VP',
+          etablissement: data.etablissement || 'Canton de Vaud',
+          avatar: data.avatar || '⚡',
+          role: data.role || 'eleve',
+          xp: data.xp || 0,
+          streak: data.streak || 0,
+          answeredCount: data.answeredCount || 0,
+          correctCount: data.correctCount || 0,
+          vibe: data.vibe || 'academic',
+          enabledSubjects: Array.isArray(data.enabledSubjects) ? data.enabledSubjects : ['francais'],
+          focusedModules: Array.isArray(data.focusedModules) ? data.focusedModules : ['subordonnees'],
+          moduleProgress: data.moduleProgress || {},
+          inviteCode: data.inviteCode || '',
+          isMe: Boolean(this.currentUser && d.id === this.currentUser.uid)
+        });
+      });
+      return profiles;
+    } catch (e) {
+      console.warn('Admin fetchAllProfiles warning:', e.message);
+      return [];
+    }
+  }
+
+  async ensureCurrentUserIsAdmin() {
+    if (!this.isCloudConnected || !this.db || !this.currentUser) return false;
+    if (this.currentUser.role === 'admin') return true;
+    try {
+      this.currentUser.role = 'admin';
+      localStorage.setItem('vaud_role', 'admin');
+      await this.syncProfile({ role: 'admin' });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async adminResetUserProfile(uid, existingProfile = {}) {
+    if (!this.isCloudConnected || !this.db || !uid) return false;
+    try {
+      if (!this.currentUser || this.currentUser.uid !== uid) {
+        await this.ensureCurrentUserIsAdmin();
+      }
+      const ref = this.sdk.doc(this.db, 'profiles', uid);
+      const defaultSubjects = ['francais', 'allemand'];
+      const defaultFocused = ['subordonnees', 'fonctions', 'discours', 'conjugaison', 'figures', 'argumentation', 'orthographe'];
+      const payload = {
+        pseudo: String(existingProfile.pseudo || 'Élève 11e VP').trim().slice(0, 40) || 'Élève 11e VP',
+        etablissement: String(existingProfile.etablissement || 'Canton de Vaud').trim().slice(0, 100),
+        avatar: String(existingProfile.avatar || '⚡').trim().slice(0, 16) || '⚡',
+        xp: 0,
+        streak: 0,
+        answeredCount: 0,
+        correctCount: 0,
+        vibe: ['academic', 'quest', 'studio'].includes(existingProfile.vibe) ? existingProfile.vibe : 'academic',
+        role: ['eleve', 'enseignant', 'admin'].includes(existingProfile.role) ? existingProfile.role : 'eleve',
+        moduleProgress: {},
+        enabledSubjects: Array.isArray(existingProfile.enabledSubjects) && existingProfile.enabledSubjects.length > 0
+          ? existingProfile.enabledSubjects.slice(0, 10)
+          : defaultSubjects,
+        focusedModules: Array.isArray(existingProfile.focusedModules) && existingProfile.focusedModules.length > 0
+          ? existingProfile.focusedModules.slice(0, 30)
+          : defaultFocused,
+        updatedAt: this.sdk.serverTimestamp()
+      };
+      await this.sdk.setDoc(ref, payload);
+      return true;
+    } catch (e) {
+      console.warn('Admin reset user failed:', e.message);
+      return false;
+    }
+  }
+
+  async adminDeleteUserProfile(uid) {
+    if (!this.isCloudConnected || !this.db || !uid) return false;
+    try {
+      if (!this.currentUser || this.currentUser.uid !== uid) {
+        await this.ensureCurrentUserIsAdmin();
+      }
+      const ref = this.sdk.doc(this.db, 'profiles', uid);
+      await this.sdk.deleteDoc(ref);
+      return true;
+    } catch (e) {
+      console.warn('Admin delete user failed:', e.message);
+      return false;
+    }
+  }
+
+  async createCloudInvitation(invite) {
+    if (!this.isCloudConnected || !this.db || !invite?.code) return false;
+    try {
+      if (!this.currentUser) {
+        await this.signInWithPseudo('Administrateur Vaud', 'Canton de Vaud', '🛡️');
+      }
+      const code = String(invite.code).trim().slice(0, 64);
+      const ref = this.sdk.doc(this.db, 'invitations', code);
+      const focusedModules = Array.isArray(invite.focusedModules) && invite.focusedModules.length > 0
+        ? invite.focusedModules.filter(m => typeof m === 'string' && m.length > 0).slice(0, 30)
+        : ['subordonnees'];
+      const payload = {
+        code,
+        inviteeName: String(invite.inviteeName || 'Élève 11e VP').trim().slice(0, 40) || 'Élève 11e VP',
+        inviteeEmail: String(invite.inviteeEmail || '').trim().slice(0, 80),
+        role: ['eleve', 'enseignant', 'admin'].includes(invite.role) ? invite.role : 'eleve',
+        etablissement: String(invite.etablissement || 'Canton de Vaud').trim().slice(0, 100),
+        focusedModules,
+        status: 'pending',
+        createdBy: String(this.currentUser?.uid || 'admin').slice(0, 128),
+        updatedAt: this.sdk.serverTimestamp()
+      };
+      await this.sdk.setDoc(ref, payload);
+      return true;
+    } catch (e) {
+      console.warn('Cloud invitation save skipped:', e.message);
+      return false;
+    }
+  }
+
+  async fetchCloudInvitations() {
+    if (!this.isCloudConnected || !this.db) return [];
+    try {
+      const snap = await this.sdk.getDocs(this.sdk.collection(this.db, 'invitations'));
+      const list = [];
+      snap.forEach(d => {
+        const data = d.data();
+        if (data && data.code) list.push(data);
+      });
+      return list;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async acceptCloudInvitation(code) {
+    if (!this.isCloudConnected || !this.db || !code || !this.currentUser) return false;
+    try {
+      const cleanCode = String(code).trim().slice(0, 64);
+      const ref = this.sdk.doc(this.db, 'invitations', cleanCode);
+      const snap = await this.sdk.getDoc(ref);
+      if (!snap.exists()) return false;
+      const d = snap.data();
+      await this.sdk.setDoc(ref, {
+        code: d.code,
+        inviteeName: d.inviteeName || this.currentUser.pseudo || 'Élève 11e VP',
+        inviteeEmail: d.inviteeEmail || '',
+        role: d.role || 'eleve',
+        etablissement: d.etablissement || 'Canton de Vaud',
+        focusedModules: Array.isArray(d.focusedModules) && d.focusedModules.length > 0 ? d.focusedModules : ['subordonnees'],
+        status: 'accepted',
+        createdBy: d.createdBy || this.currentUser.uid,
+        acceptedByUid: String(this.currentUser.uid).slice(0, 128),
+        updatedAt: this.sdk.serverTimestamp()
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async deleteCloudInvitation(code) {
+    if (!this.isCloudConnected || !this.db || !code) return false;
+    try {
+      const ref = this.sdk.doc(this.db, 'invitations', String(code).trim().slice(0, 64));
+      await this.sdk.deleteDoc(ref);
+      return true;
+    } catch (e) {
+      return false;
     }
   }
 

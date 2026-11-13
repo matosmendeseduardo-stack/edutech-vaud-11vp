@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Objectif Gymnase — 11e VP Vaud (Plateforme Gratuite PER v1.5.0)</title>
+  <title>Objectif Gymnase — 11e VP Vaud (Plateforme Gratuite PER v1.6.0)</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%232563eb'/%3E%3Cstop offset='100%25' stop-color='%230d9488'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='url(%23g)'/%3E%3Ctext x='50%25' y='56%25' text-anchor='middle' font-family='system-ui,-apple-system,sans-serif' font-weight='800' font-size='28' fill='%23ffffff'%3EVP%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="css/styles.css" />
 </head>
@@ -41,15 +41,19 @@
           <span>⚙️</span>
           <span>Paramètres</span>
         </button>
+        <button class="main-tab admin-tab" data-view="admin" id="admin-nav-tab" role="tab" aria-selected="false">
+          <span>🛡️</span>
+          <span>Admin</span>
+        </button>
       </nav>
 
       <!-- Student Streak, XP & Account Auth Pill -->
       <div class="user-stats-pills top-stats-right">
         <div class="stat-pill streak" title="Série de jours d'étude consécutifs">
-          🔥 <span id="stat-streak">5 j.</span>
+          🔥 <span id="stat-streak">0 j.</span>
         </div>
         <div class="stat-pill xp" title="Points d'expérience gagnés">
-          ✨ <span id="stat-xp">340 XP</span>
+          ✨ <span id="stat-xp">0 XP</span>
         </div>
         <button class="auth-profile-pill" id="user-auth-pill" title="Ouvrir Connexion & Profil Élève 11e VP">
           👤 <span id="user-auth-label">Connexion / Profil</span>
@@ -74,6 +78,52 @@
            ================================================================ -->
       <section class="app-view active" id="view-parcours" data-view-panel="parcours">
 
+        <!-- Fresh-Start Path Builder ("No Data, Just a Path to Be Built") -->
+        <div class="path-builder-card" id="fresh-start-builder-card">
+          <div class="path-builder-header">
+            <div>
+              <span class="per-tag" id="path-builder-badge">🌱 Nouveau Parcours 11e VP • 0% → Objectif Certificat</span>
+              <h2 id="path-builder-title">Construis ton parcours de révision sur mesure</h2>
+              <p id="path-builder-desc">
+                Aucune donnée pré-remplie : ton compteur démarre à <strong>0 XP</strong>. Choisis tes chapitres prioritaires (ou suis l’invitation reçue) et réponds à ta 1re question pour débloquer ta progression.
+              </p>
+            </div>
+          </div>
+
+          <div class="path-steps-grid">
+            <div class="path-step-item active" id="path-step-1">
+              <div class="path-step-num">1</div>
+              <div class="path-step-body">
+                <strong>Identité &amp; École</strong>
+                <span id="path-step-1-status">Choisis ton pseudo ou accepte ton invitation</span>
+              </div>
+              <button class="secondary-btn compact-btn" id="path-step-auth-btn">👤 Profil</button>
+            </div>
+
+            <div class="path-step-item active" id="path-step-2">
+              <div class="path-step-num">2</div>
+              <div class="path-step-body">
+                <strong>Chapitres à construire</strong>
+                <span id="path-step-2-status">Sélectionne tes chapitres ciblés ci-dessous</span>
+              </div>
+              <button class="secondary-btn compact-btn" id="path-step-chapters-btn">🎯 Cibler</button>
+            </div>
+
+            <div class="path-step-item cta-step" id="path-step-3">
+              <div class="path-step-num">3</div>
+              <div class="path-step-body">
+                <strong>1er Exercice (0 → +15 XP)</strong>
+                <span id="path-step-3-status">Lance ta première analyse PER</span>
+              </div>
+              <button class="primary-cta-btn compact-cta-btn" id="path-step-start-btn">Lancer →</button>
+            </div>
+          </div>
+
+          <div class="path-quick-chapters" id="path-quick-chapters">
+            <!-- Populated dynamically with toggleable chapter pills -->
+          </div>
+        </div>
+
         <!-- Welcoming Readiness & Continue Card -->
         <div class="parcours-hero-card">
           <div class="parcours-hero-top">
@@ -81,7 +131,7 @@
               <div class="subject-pills-row" id="subject-tabs-container">
                 <!-- Populated dynamically: 📘 Français 11e VP | 🇩🇪 Allemand (if enabled) -->
               </div>
-              <h1 id="hero-title">Prêt pour ta session 11e VP ?</h1>
+              <h1 id="hero-title">Prêt à construire ton parcours 11e VP ?</h1>
               <p id="hero-subtitle">
                 Révise les 7 chapitres de Français, les 4 chapitres d’Allemand (PER L2) et entraîne-toi sur les Examens Blancs du Certificat, avec ton Coach IA toujours à côté.
               </p>
@@ -89,7 +139,7 @@
 
             <div class="parcours-hero-cta">
               <button class="primary-cta-btn" id="continue-study-btn">
-                Continuer l’entraînement →
+                🚀 Démarrer mon parcours →
               </button>
               <button class="secondary-btn" id="hero-sprint-btn" title="Lancer 60 secondes de questions rapides">
                 ⚡ Sprint 60s
@@ -104,10 +154,10 @@
           <div class="readiness-strip">
             <div class="readiness-labels">
               <span class="readiness-title">🎓 Objectif Certificat 11e VP</span>
-              <span class="readiness-value" id="readiness-pct-label">57% prêt (340 / 600 XP)</span>
+              <span class="readiness-value" id="readiness-pct-label">0% prêt (0 / 600 XP)</span>
             </div>
             <div class="progress-bar-track">
-              <div class="progress-bar-fill" id="readiness-bar-fill" style="width: 57%;"></div>
+              <div class="progress-bar-fill" id="readiness-bar-fill" style="width: 0%;"></div>
             </div>
             <div class="readiness-submeta">
               <span id="active-focus-summary">7 chapitres PER actifs</span>
@@ -129,16 +179,16 @@
           <!-- VIBE 3 EXCLUSIVE: Minimalist Studio Telemetry Bar -->
           <div class="studio-metrics-bar">
             <div class="studio-metric-card">
-              <div class="metric-val" id="studio-accuracy">83%</div>
+              <div class="metric-val" id="studio-accuracy">—</div>
               <div class="metric-lbl">Précision PER</div>
             </div>
             <div class="studio-metric-card">
-              <div class="metric-val" id="studio-answered">18</div>
+              <div class="metric-val" id="studio-answered">0</div>
               <div class="metric-lbl">Analyses résolues</div>
             </div>
             <div class="studio-metric-card">
-              <div class="metric-val" id="studio-rank">#2 Vaud</div>
-              <div class="metric-lbl">Classement Amis</div>
+              <div class="metric-val" id="studio-rank">Non classé</div>
+              <div class="metric-lbl">Classement Vaud</div>
             </div>
             <div class="studio-metric-card">
               <div class="metric-val">[1-4]</div>
@@ -378,14 +428,11 @@
             <div class="duel-generator-box">
               <div class="duel-code-label">CODE DE DÉFI SYNCHRONE (<span id="duel-active-chapter">Subordonnées</span>)</div>
               <div class="duel-code-value" id="duel-challenge-code">VD-11VP-4820</div>
-              <div class="duel-code-sub">Score à battre : <strong id="duel-xp-target">340 XP</strong> • 5 questions PER encodées dans le lien</div>
+              <div class="duel-code-sub">Score à battre : <strong id="duel-xp-target">0 XP</strong> • 5 questions PER encodées dans le lien</div>
 
               <div class="duel-actions-row">
                 <button class="primary-cta-btn" id="copy-duel-btn">
                   🔗 Copier le lien Duel (#duel=...)
-                </button>
-                <button class="secondary-btn" id="simulate-friend-btn">
-                  🤖 Simuler un duel contre Léo (+30 XP)
                 </button>
               </div>
               <div class="duel-share-preview" id="duel-share-preview" style="display: none;"></div>
@@ -423,15 +470,15 @@
 
               <div class="family-share-grid">
                 <div class="family-stat-box">
-                  <strong id="family-stat-xp">340 XP</strong>
+                  <strong id="family-stat-xp">0 XP</strong>
                   <span>Points d’étude</span>
                 </div>
                 <div class="family-stat-box">
-                  <strong id="family-stat-acc">83%</strong>
+                  <strong id="family-stat-acc">—</strong>
                   <span>Réussite PER</span>
                 </div>
                 <div class="family-stat-box">
-                  <strong id="family-stat-streak">🔥 5 j.</strong>
+                  <strong id="family-stat-streak">🔥 0 j.</strong>
                   <span>Série active</span>
                 </div>
               </div>
@@ -621,6 +668,147 @@
           </div>
         </div>
 
+      </section>
+
+      <!-- ================================================================
+           VIEW 5: 🛡️ ADMIN (User Review, Invitations & Fresh-Start Control)
+           ================================================================ -->
+      <section class="app-view" id="view-admin" data-view-panel="admin">
+        <div class="view-page-header">
+          <div class="card-heading-row">
+            <div>
+              <h1>🛡️ Console d’Administration &amp; Invitations</h1>
+              <p>Supervise les utilisateurs inscrits (Cloud Firestore), purge les comptes de test et génère des invitations personnalisées avec parcours pré-ciblé (démarrage à 0%).</p>
+            </div>
+            <div class="admin-header-actions">
+              <button class="secondary-btn compact-btn" id="admin-refresh-btn">🔄 Actualiser Cloud</button>
+              <button class="secondary-btn compact-btn danger-outline-btn" id="admin-purge-qa-btn" title="Supprimer les profils de test QA_* dans Firestore">
+                🗑️ Purger comptes test QA
+              </button>
+              <button class="secondary-btn compact-btn danger-outline-btn" id="admin-reset-local-btn" title="Réinitialiser ma session locale à 0 XP et 0%">
+                🧹 Réinitialiser ma session (0 XP)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- KPI Summary Strip -->
+        <div class="admin-kpi-grid">
+          <div class="surface-card admin-kpi-card">
+            <span class="admin-kpi-label">Utilisateurs inscrits</span>
+            <strong class="admin-kpi-val" id="admin-kpi-users">0</strong>
+          </div>
+          <div class="surface-card admin-kpi-card">
+            <span class="admin-kpi-label">Invitations envoyées</span>
+            <strong class="admin-kpi-val" id="admin-kpi-invites">0</strong>
+          </div>
+          <div class="surface-card admin-kpi-card">
+            <span class="admin-kpi-label">Parcours actifs (&gt; 0 XP)</span>
+            <strong class="admin-kpi-val" id="admin-kpi-active">0</strong>
+          </div>
+          <div class="surface-card admin-kpi-card">
+            <span class="admin-kpi-label">Statut Cloud Firestore</span>
+            <strong class="admin-kpi-val" id="admin-kpi-cloud">Connecté</strong>
+          </div>
+        </div>
+
+        <!-- CARD A: Invite Users & Pre-Build Their Learning Path (#invite=...) -->
+        <div class="surface-card settings-card">
+          <div class="card-heading-row">
+            <div>
+              <h2>✉️ 1. Inviter un utilisateur &amp; définir son parcours initial</h2>
+              <p class="settings-desc" style="margin-bottom:0;">
+                Crée une invitation enregistrée dans Firestore et génère un lien d’embarquement 1-clic (<code>#invite=...</code>) qui démarre vierge (<strong>0 XP • 0%</strong>) sur les chapitres choisis.
+              </p>
+            </div>
+            <span class="per-tag">Onboarding 0%</span>
+          </div>
+
+          <form class="admin-invite-form" id="admin-invite-form" onsubmit="return false;">
+            <div class="admin-form-grid">
+              <div class="auth-field">
+                <label for="invite-name-input">Prénom / Pseudo de l’invité :</label>
+                <input type="text" id="invite-name-input" class="auth-input" placeholder="Ex: Camille_11VP" required maxlength="40" />
+              </div>
+              <div class="auth-field">
+                <label for="invite-email-input">Email (optionnel) :</label>
+                <input type="email" id="invite-email-input" class="auth-input" placeholder="camille@edu-vd.ch" maxlength="80" />
+              </div>
+              <div class="auth-field">
+                <label for="invite-role-select">Rôle :</label>
+                <select id="invite-role-select" class="auth-input">
+                  <option value="eleve">🎓 Élève 11e VP</option>
+                  <option value="enseignant">👩‍🏫 Enseignant(e)</option>
+                  <option value="admin">🛡️ Administrateur</option>
+                </select>
+              </div>
+              <div class="auth-field">
+                <label for="invite-school-select">Établissement Vaudois :</label>
+                <select id="invite-school-select" class="auth-input">
+                  <option value="Collège de Béthusy (Lausanne)">Collège de Béthusy (Lausanne)</option>
+                  <option value="Établissement de Nyon-Marens">Établissement de Nyon-Marens</option>
+                  <option value="Établissement de Morges Beausobre">Établissement de Morges Beausobre</option>
+                  <option value="Établissement de Vevey">Établissement de Vevey</option>
+                  <option value="Établissement d'Yverdon">Établissement d'Yverdon</option>
+                  <option value="Autre établissement VD">Autre établissement VD</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <div class="settings-label" style="margin-bottom:6px;">Chapitres PER pré-sélectionnés pour son parcours à construire (0%) :</div>
+              <div class="teacher-chapters-pills" id="admin-invite-chapters-pills">
+                <!-- Populated dynamically with FR + DE chapter pills -->
+              </div>
+            </div>
+
+            <div class="teacher-output-box" id="admin-invite-output-box">
+              <span class="teacher-output-link" id="admin-invite-link-preview">Remplis le formulaire et clique sur « Créer &amp; Copier l’invitation »...</span>
+              <button type="submit" class="primary-cta-btn compact-cta-btn" id="create-invite-btn">
+                ✉️ Créer &amp; Copier le lien (#invite=...)
+              </button>
+            </div>
+          </form>
+
+          <!-- Sent Invitations List -->
+          <div class="admin-invites-list-wrap">
+            <h4 class="admin-subtable-title">📋 Invitations générées</h4>
+            <div class="admin-table-container" id="admin-invites-list">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <!-- CARD B: Registered Users Review Table (Firestore + Local) -->
+        <div class="surface-card settings-card">
+          <div class="card-heading-row">
+            <div>
+              <h2>👥 2. Utilisateurs inscrits &amp; Revue des Parcours</h2>
+              <p class="settings-desc" style="margin-bottom:0;">
+                Liste en temps réel des profils enregistrés dans Cloud Firestore. Aucune donnée fictive : seuls les vrais profils créés ou invités apparaissent ici.
+              </p>
+            </div>
+            <input type="search" id="admin-user-search" class="auth-input admin-search-input" placeholder="🔍 Filtrer pseudo, école, rôle..." />
+          </div>
+
+          <div class="admin-table-container">
+            <table class="admin-users-table" aria-label="Utilisateurs inscrits">
+              <thead>
+                <tr>
+                  <th>Utilisateur</th>
+                  <th>Établissement</th>
+                  <th>Rôle</th>
+                  <th>Progression</th>
+                  <th>Chapitres du parcours</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="admin-users-tbody">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
     </main>

@@ -8,7 +8,7 @@
    - Combinatorial PER Exercise Generator (+200 variations)
    ========================================================================== */
 
-window.APP_VERSION = 'v1.5.0';
+window.APP_VERSION = 'v1.6.0';
 
 window.VAUD_QUEST_STATIONS = [
   { id: 'nyon', city: 'Nyon', topic: 'Fonctions PER', xpRequired: 0 },
@@ -32,7 +32,7 @@ window.CURRICULUM_DATA = {
         icon: '🧩',
         station: 'Morges',
         description: 'Identifier la nature et la fonction des propositions subordonnées selon la grammaire officielle vaudoise.',
-        mastery: 75,
+        mastery: 0,
         theorySheet: {
           title: 'Aide-Mémoire PER : Les 3 grandes familles de subordonnées',
           points: [
@@ -135,7 +135,7 @@ window.CURRICULUM_DATA = {
         icon: '📐',
         station: 'Nyon',
         description: 'Maîtriser la terminologie grammaticale romande : distinguer Complément de phrase (CP) et Compléments de verbe (CDV/CIV).',
-        mastery: 80,
+        mastery: 0,
         theorySheet: {
           title: 'Aide-Mémoire PER : Les fonctions dans la phrase',
           points: [
@@ -224,7 +224,7 @@ window.CURRICULUM_DATA = {
         icon: '💬',
         station: 'Lausanne',
         description: 'Transposer un énoncé du discours direct au discours indirect en respectant la concordance des temps et les repères spatio-temporels.',
-        mastery: 68,
+        mastery: 0,
         theorySheet: {
           title: 'Aide-Mémoire PER : Transposer au Discours Indirect',
           points: [
@@ -298,7 +298,7 @@ window.CURRICULUM_DATA = {
         icon: '⏳',
         station: 'Lausanne',
         description: 'Justifier l’emploi de l’imparfait, du passé simple, du présent, du conditionnel et du subjonctif lors des analyses de textes.',
-        mastery: 62,
+        mastery: 0,
         theorySheet: {
           title: 'Aide-Mémoire PER : Les valeurs des temps à connaître par cœur',
           points: [
@@ -386,7 +386,7 @@ window.CURRICULUM_DATA = {
         icon: '🎭',
         station: 'Vevey',
         description: 'Repérer et interpréter les figures d’analogie, d’opposition, d’insistance et d’amplification pour l’écrit et l’oral.',
-        mastery: 85,
+        mastery: 0,
         theorySheet: {
           title: 'Aide-Mémoire PER : Les figures de style incontournables en 11e VP',
           points: [
@@ -474,7 +474,7 @@ window.CURRICULUM_DATA = {
         icon: '✍️',
         station: 'Montreux (Certificat)',
         description: 'Maîtriser le sujet amené/posé/divisé, les connecteurs logiques, la thèse, la concession et la réfutation.',
-        mastery: 70,
+        mastery: 0,
         theorySheet: {
           title: 'Aide-Mémoire PER : Réussir l’épreuve écrite du texte argumentatif',
           points: [
@@ -548,7 +548,7 @@ window.CURRICULUM_DATA = {
         icon: '✒️',
         station: 'Montreux (Certificat)',
         description: 'Maîtriser l’accord du participe passé avec être, avoir (CDV antéposé) et les verbes pronominaux pour éviter toute perte de points à l’écrit.',
-        mastery: 66,
+        mastery: 0,
         theorySheet: {
           title: 'Aide-Mémoire PER : Les 3 règles d’or du Participe Passé',
           points: [
@@ -657,7 +657,7 @@ window.CURRICULUM_DATA = {
         icon: '🇩🇪',
         station: 'Lausanne',
         description: 'Maîtriser la position 2 du verbe (V2), le rejet en fin de subordonnée (Nebensatz) et la règle weil/wenn/als.',
-        mastery: 55,
+        mastery: 0,
         theorySheet: {
           title: 'Merkblatt PER L2 : Hauptsatz (V2) vs. Nebensatz (Verb am Ende)',
           points: [
@@ -732,7 +732,7 @@ window.CURRICULUM_DATA = {
         icon: '⏱️',
         station: 'Morges',
         description: 'Choisir entre haben et sein au Perfekt, former le Partizip II (inséparables, séparables, forts) et conjuguer les modaux au Präteritum.',
-        mastery: 50,
+        mastery: 0,
         theorySheet: {
           title: 'Merkblatt PER L2 : Perfekt & Präteritum der Modalverben',
           points: [
@@ -807,7 +807,7 @@ window.CURRICULUM_DATA = {
         icon: '🧭',
         station: 'Vevey',
         description: 'Maîtriser les prépositions à cas fixe (Dativ / Akkusativ) et les prépositions mixtes (Wo? → Dativ / Wohin? → Akkusativ).',
-        mastery: 48,
+        mastery: 0,
         theorySheet: {
           title: 'Merkblatt PER L2 : Déclinaisons & Prépositions essentielles',
           points: [
@@ -881,7 +881,7 @@ window.CURRICULUM_DATA = {
         icon: '🗣️',
         station: 'Montreux (Certificat)',
         description: 'Réviser le vocabulaire clé de 11e VP (argumentation en allemand, vie scolaire, environnement, faux-amis) sous forme de flashcards.',
-        mastery: 60,
+        mastery: 0,
         theorySheet: {
           title: 'Merkblatt PER L2 : Mots-outils et lexique clé du Certificat',
           points: [
@@ -953,12 +953,7 @@ window.CURRICULUM_DATA = {
   }
 };
 
-window.INITIAL_LEADERBOARD = [
-  { name: 'Chloé M. (Collège de Béthusy)', xp: 540, streak: 9, avatar: '🦊', isMe: false },
-  { name: 'Toi (Élève 11e VP)', xp: 340, streak: 5, avatar: '⚡', isMe: true },
-  { name: 'Léo R. (Établissement de Nyon)', xp: 310, streak: 4, avatar: '🏔️', isMe: false },
-  { name: 'Inès K. (Morges Beausobre)', xp: 275, streak: 6, avatar: '📚', isMe: false }
-];
+window.INITIAL_LEADERBOARD = [];
 
 /* ==========================================================================
    Simulation « Examen Blanc de Certificat Vaud » (DGEO / PER 11e VP)

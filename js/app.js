@@ -32,21 +32,32 @@ class ObjectifGymnaseApp {
       ])
     ];
 
+    let savedModuleProgress = {};
+    try {
+      savedModuleProgress = JSON.parse(localStorage.getItem('vaud_module_progress') || '{}') || {};
+    } catch {}
+
+    let savedAdminInvites = [];
+    try {
+      savedAdminInvites = JSON.parse(localStorage.getItem('vaud_admin_invites') || '[]') || [];
+    } catch {}
+
     this.state = {
-      activeView: 'parcours', // 'parcours' | 'entrainement' | 'defis' | 'parametres'
+      activeView: 'parcours', // 'parcours' | 'entrainement' | 'defis' | 'parametres' | 'admin'
       vibe: localStorage.getItem('vaud_vibe') || 'academic',
       enabledSubjects: savedSubjects.length ? savedSubjects : ['francais'],
       focusedModules: mergedFocus.length ? mergedFocus : defaultFrancaisFocus,
       mistakeQuestions: savedMistakes,
+      moduleProgress: savedModuleProgress,
       subject: 'francais',
       activeModuleId: mergedFocus[0] || 'subordonnees',
       currentQuestionIndex: 0,
       exerciseMode: 'all', // 'all' | 'surgery' | 'mistakes' | 'sprint' | 'exam'
       theoryOpen: false,
-      xp: parseInt(localStorage.getItem('vaud_xp') || '340', 10),
-      streak: parseInt(localStorage.getItem('vaud_streak') || '5', 10),
-      answeredCount: parseInt(localStorage.getItem('vaud_answered') || '18', 10),
-      correctCount: parseInt(localStorage.getItem('vaud_correct') || '15', 10),
+      xp: parseInt(localStorage.getItem('vaud_xp') || '0', 10),
+      streak: parseInt(localStorage.getItem('vaud_streak') || '0', 10),
+      answeredCount: parseInt(localStorage.getItem('vaud_answered') || '0', 10),
+      correctCount: parseInt(localStorage.getItem('vaud_correct') || '0', 10),
       answeredCurrent: false,
       sprintTimer: null,
       sprintSecondsLeft: 60,
@@ -62,7 +73,12 @@ class ObjectifGymnaseApp {
       examTimer: null,
       examSecondsLeft: (CERTIFICAT_MOCK_EXAMS[0]?.durationMinutes || 45) * 60,
       activeDuelSession: null,
-      teacherAssignment: null
+      teacherAssignment: null,
+      // v1.6.0: Admin Console & User Invitations
+      activeInvitation: null,
+      adminUsers: [],
+      adminInvites: savedAdminInvites,
+      adminSearchQuery: ''
     };
 
     this.aiCoach = new VaudAICoach();
@@ -163,12 +179,109 @@ class ObjectifGymnaseApp {
       if (decoded && decoded.modId) {
         this.startDuelSession(decoded);
       }
+      return;
     }
+
+    if (hash.startsWith('#invite=')) {
+      const decoded = this.decodeSharePayload(hash.slice('#invite='.length));
+      if (decoded && decoded.name) {
+        const modules = Array.isArray(decoded.modules) && decoded.modules.length > 0
+          ? decoded.modules
+          : ['subordonnees', 'fonctions', 'orthographe'];
+        this.state.activeInvitation = {
+          code: decoded.code || `INV-${Date.now()}`,
+          name: decoded.name,
+          email: decoded.email || '',
+          role: decoded.role || 'eleve',
+          school: decoded.school || 'Canton de Vaud',
+          modules
+        };
+        this.state.focusedModules = modules;
+        localStorage.setItem('vaud_focused_customized', 'true');
+        localStorage.setItem('vaud_focused_modules', JSON.stringify(modules));
+        if (decoded.code) localStorage.setItem('vaud_invite_code', decoded.code);
+        if (decoded.role) localStorage.setItem('vaud_role', decoded.role);
+
+        // Enable German if any German module is included in the invited path
+        const hasGerman = modules.some(m => String(m).startsWith('de-'));
+        if (hasGerman && !this.state.enabledSubjects.includes('allemand')) {
+          this.state.enabledSubjects.push('allemand');
+          localStorage.setItem('vaud_enabled_subjects', JSON.stringify(this.state.enabledSubjects));
+        }
+
+        const firstMeta = this.findModuleMeta(modules[0]);
+        if (firstMeta) {
+          this.state.subject = firstMeta.subjKey;
+          this.state.activeModuleId = firstMeta.mod.id;
+        }
+
+        // Ensure invited user starts fresh at 0 XP / 0% path to build
+        this.resetProgressCountersOnly();
+        this.renderSharedContextBanner();
+        this.renderAll();
+      }
+    }
+  }
+
+  resetProgressCountersOnly() {
+    this.state.xp = 0;
+    this.state.streak = 0;
+    this.state.answeredCount = 0;
+    this.state.correctCount = 0;
+    this.state.moduleProgress = {};
+    this.state.mistakeQuestions = [];
+    localStorage.setItem('vaud_xp', '0');
+    localStorage.setItem('vaud_streak', '0');
+    localStorage.setItem('vaud_answered', '0');
+    localStorage.setItem('vaud_correct', '0');
+    localStorage.setItem('vaud_module_progress', '{}');
+    localStorage.setItem('vaud_mistake_questions', '[]');
   }
 
   renderSharedContextBanner() {
     const bannerEl = document.getElementById('shared-context-banner');
     if (!bannerEl) return;
+
+    if (this.state.activeInvitation) {
+      const inv = this.state.activeInvitation;
+      bannerEl.style.display = 'flex';
+      bannerEl.innerHTML = `
+        <div class="shared-context-banner-info">
+          <span>✉️</span>
+          <span>Invitation pour <strong>${inv.name}</strong> (${inv.school}) — Parcours vierge <strong>0%</strong> (${inv.modules.length} chapitre(s) à construire)</span>
+        </div>
+        <div class="shared-context-banner-actions">
+          <button class="primary-cta-btn compact-cta-btn" id="banner-accept-invite-btn">🚀 Accepter &amp; Démarrer →</button>
+          <button class="secondary-btn compact-btn" id="banner-clear-invite-btn">Fermer ✕</button>
+        </div>
+      `;
+      bannerEl.querySelector('#banner-accept-invite-btn')?.addEventListener('click', async () => {
+        if (this.firebaseService) {
+          await this.firebaseService.signInWithPseudo(inv.name, inv.school, '🌱');
+          if (this.firebaseService.currentUser) {
+            this.firebaseService.currentUser.role = inv.role || 'eleve';
+            this.firebaseService.currentUser.inviteCode = inv.code;
+          }
+          await this.firebaseService.acceptCloudInvitation(inv.code);
+          this.syncStateToCloud();
+        }
+        this.state.activeInvitation = null;
+        if (window.location.hash.startsWith('#invite=')) {
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+        this.renderSharedContextBanner();
+        this.renderAll();
+        this.switchView('entrainement');
+      });
+      bannerEl.querySelector('#banner-clear-invite-btn')?.addEventListener('click', () => {
+        this.state.activeInvitation = null;
+        if (window.location.hash.startsWith('#invite=')) {
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+        this.renderSharedContextBanner();
+      });
+      return;
+    }
 
     if (this.state.teacherAssignment) {
       const a = this.state.teacherAssignment;
@@ -214,23 +327,17 @@ class ObjectifGymnaseApp {
         this.state.xp = cloudProfile.xp;
         localStorage.setItem('vaud_xp', String(this.state.xp));
       }
-      if (typeof cloudProfile.streak === 'number') {
+      if (typeof cloudProfile.streak === 'number' && cloudProfile.streak > this.state.streak) {
         this.state.streak = cloudProfile.streak;
         localStorage.setItem('vaud_streak', String(this.state.streak));
       }
-    }
-
-    // Update "isMe" entry in leaderboard with student's custom pseudo, avatar & school
-    const meRow = this.state.leaderboard.find(r => r.isMe);
-    if (meRow) {
-      if (user) {
-        meRow.name = `${user.pseudo} (${user.etablissement || 'Vaud'})`;
-        meRow.avatar = user.avatar || '⚡';
-      } else {
-        meRow.name = 'Toi (Élève 11e VP)';
-        meRow.avatar = '⚡';
+      if (cloudProfile.moduleProgress && typeof cloudProfile.moduleProgress === 'object') {
+        this.state.moduleProgress = { ...cloudProfile.moduleProgress, ...this.state.moduleProgress };
+        localStorage.setItem('vaud_module_progress', JSON.stringify(this.state.moduleProgress));
       }
-      meRow.xp = this.state.xp;
+      if (cloudProfile.role && this.state.currentUser) {
+        this.state.currentUser.role = cloudProfile.role;
+      }
     }
 
     // If connected to Cloud Firestore, sync leaderboard + personal mistake queue
@@ -239,7 +346,7 @@ class ObjectifGymnaseApp {
         this.firebaseService.fetchLeaderboard(),
         this.firebaseService.loadCloudMistakes()
       ]);
-      if (cloudRows && cloudRows.length > 0) {
+      if (Array.isArray(cloudRows)) {
         this.state.leaderboard = cloudRows;
       }
       if (Array.isArray(cloudMistakes) && cloudMistakes.length > 0) {
@@ -253,9 +360,13 @@ class ObjectifGymnaseApp {
     }
 
     this.renderAuthHeaderPill();
+    this.renderPathBuilderCard();
     this.renderHeaderAndReadiness();
     this.renderDefisAndFamilyView();
     this.renderSettingsView();
+    if (this.state.activeView === 'admin') {
+      this.refreshAdminConsole();
+    }
   }
 
   renderAuthHeaderPill() {
@@ -279,6 +390,7 @@ class ObjectifGymnaseApp {
       answeredCount: this.state.answeredCount,
       correctCount: this.state.correctCount,
       vibe: this.state.vibe,
+      moduleProgress: this.state.moduleProgress,
       enabledSubjects: this.state.enabledSubjects,
       focusedModules: this.state.focusedModules
     });
@@ -524,6 +636,10 @@ class ObjectifGymnaseApp {
       if (badge) badge.style.display = 'none';
     }
 
+    if (viewName === 'admin') {
+      this.refreshAdminConsole();
+    }
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -595,6 +711,7 @@ class ObjectifGymnaseApp {
   renderAll() {
     this.renderAuthHeaderPill();
     this.renderSharedContextBanner();
+    this.renderPathBuilderCard();
     this.renderHeaderAndReadiness();
     this.renderSubjectTabs();
     this.renderQuestMap();
@@ -604,6 +721,90 @@ class ObjectifGymnaseApp {
     this.renderArena();
     this.renderDefisAndFamilyView();
     this.renderSettingsView();
+    this.renderAdminView();
+  }
+
+  renderPathBuilderCard() {
+    const cardEl = document.getElementById('fresh-start-builder-card');
+    if (!cardEl) return;
+
+    const u = this.state.currentUser;
+    const inv = this.state.activeInvitation;
+    const step1El = document.getElementById('path-step-1');
+    const step1Status = document.getElementById('path-step-1-status');
+    const step2Status = document.getElementById('path-step-2-status');
+    const step3El = document.getElementById('path-step-3');
+    const step3Status = document.getElementById('path-step-3-status');
+    const badgeEl = document.getElementById('path-builder-badge');
+    const titleEl = document.getElementById('path-builder-title');
+    const quickChaptersEl = document.getElementById('path-quick-chapters');
+
+    if (step1El && step1Status) {
+      if (u && u.pseudo) {
+        step1El.classList.add('done');
+        step1Status.textContent = `✓ ${u.pseudo} (${u.etablissement || 'Vaud'})`;
+      } else if (inv) {
+        step1El.classList.remove('done');
+        step1Status.textContent = `✉️ Invité : ${inv.name} (${inv.school})`;
+      } else {
+        step1El.classList.remove('done');
+        step1Status.textContent = 'Choisis ton pseudo ou accepte ton invitation';
+      }
+    }
+
+    if (step2Status) {
+      step2Status.textContent = `${this.state.focusedModules.length} chapitre(s) dans ton parcours`;
+    }
+
+    if (step3El && step3Status) {
+      if (this.state.answeredCount > 0) {
+        step3El.classList.add('done');
+        step3Status.textContent = `✓ ${this.state.answeredCount} analyse(s) • ${this.state.xp} XP`;
+        if (badgeEl) badgeEl.textContent = `🚀 Parcours en construction • ${this.state.xp} XP`;
+        if (titleEl) titleEl.textContent = 'Ton parcours 11e VP est lancé — continue chapitre par chapitre !';
+      } else {
+        step3El.classList.remove('done');
+        step3Status.textContent = 'Lance ta première analyse PER (0 → +25 XP)';
+        if (badgeEl) badgeEl.textContent = '🌱 Nouveau Parcours 11e VP • 0% → Objectif Certificat';
+        if (titleEl) titleEl.textContent = inv
+          ? `Bienvenue ${inv.name} ! Construis ton parcours sur mesure`
+          : 'Construis ton parcours de révision sur mesure';
+      }
+    }
+
+    if (quickChaptersEl) {
+      const allFr = CURRICULUM_DATA.francais.modules;
+      quickChaptersEl.innerHTML = allFr.map(mod => {
+        const isSelected = this.state.focusedModules.includes(mod.id);
+        const prog = this.state.moduleProgress?.[mod.id] || 0;
+        const shortName = mod.title.split('(')[0].replace(/^\d+\.\s*/, '').trim();
+        return `
+          <button type="button" class="mode-pill ${isSelected ? 'active' : ''}" data-path-chip="${mod.id}" title="Activer/désactiver ce chapitre dans mon parcours">
+            ${mod.icon} ${shortName} (${prog}%)
+          </button>
+        `;
+      }).join('');
+
+      quickChaptersEl.querySelectorAll('[data-path-chip]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const modId = btn.dataset.pathChip;
+          if (this.state.focusedModules.includes(modId)) {
+            if (this.state.focusedModules.length <= 1) return;
+            this.state.focusedModules = this.state.focusedModules.filter(id => id !== modId);
+          } else {
+            this.state.focusedModules.push(modId);
+          }
+          localStorage.setItem('vaud_focused_customized', 'true');
+          localStorage.setItem('vaud_focused_modules', JSON.stringify(this.state.focusedModules));
+          this.syncStateToCloud();
+          this.renderPathBuilderCard();
+          this.renderHeaderAndReadiness();
+          this.renderModuleGrid();
+          this.renderLessonChapterSelect();
+          this.renderSettingsView();
+        });
+      });
+    }
   }
 
   renderHeaderAndReadiness() {
@@ -684,19 +885,21 @@ class ObjectifGymnaseApp {
   }
 
   renderStudioMetrics() {
-    const accuracy = this.state.answeredCount > 0
+    const hasAnswered = this.state.answeredCount > 0;
+    const accuracy = hasAnswered
       ? Math.round((this.state.correctCount / this.state.answeredCount) * 100)
-      : 100;
+      : 0;
     const accEl = document.getElementById('studio-accuracy');
     const ansEl = document.getElementById('studio-answered');
     const rankEl = document.getElementById('studio-rank');
 
-    if (accEl) accEl.textContent = `${accuracy}%`;
+    if (accEl) accEl.textContent = hasAnswered ? `${accuracy}%` : '—';
     if (ansEl) ansEl.textContent = `${this.state.answeredCount}`;
 
-    const sorted = [...this.state.leaderboard].sort((a, b) => b.xp - a.xp);
+    const activeRows = this.state.leaderboard.filter(r => (r.xp || 0) > 0);
+    const sorted = [...activeRows].sort((a, b) => b.xp - a.xp);
     const myRank = sorted.findIndex(r => r.isMe) + 1;
-    if (rankEl) rankEl.textContent = `#${myRank || 2} Vaud`;
+    if (rankEl) rankEl.textContent = myRank > 0 ? `#${myRank} Vaud` : 'Non classé';
   }
 
   /* ------------------------------------------------------------------------
@@ -711,21 +914,29 @@ class ObjectifGymnaseApp {
       this.state.activeModuleId = visibleModules[0]?.id;
     }
 
-    grid.innerHTML = visibleModules.map(mod => {
+    grid.innerHTML = visibleModules.map((mod, idx) => {
       const isCurrent = mod.id === this.state.activeModuleId;
+      const prog = Math.max(0, Math.min(100, Number(this.state.moduleProgress?.[mod.id] || 0)));
+      const badgeHtml = prog > 0
+        ? `<span class="chapter-progress-badge">📈 ${prog}% acquis</span>`
+        : `<span class="chapter-zero-badge">🌱 À construire • 0%</span>`;
+      const ctaLabel = prog > 0
+        ? `Continuer (${prog}%) →`
+        : (idx === 0 ? '🚀 Démarrer l’étape 1 →' : 'Construire ce chapitre →');
+
       return `
         <article class="module-card ${isCurrent ? 'active-chapter' : ''}" data-module-card="${mod.id}">
           <div>
             <div class="module-card-top">
               <div class="module-icon">${mod.icon}</div>
-              <span class="per-tag">${mod.perRef}</span>
+              ${badgeHtml}
             </div>
             <h3>${mod.title}</h3>
             <p>${mod.description}</p>
           </div>
           <div class="module-card-footer">
             <span>📍 ${mod.station} • ${mod.questions.length} exercices</span>
-            <span class="train-chapter-btn">S’entraîner →</span>
+            <span class="train-chapter-btn">${ctaLabel}</span>
           </div>
         </article>
       `;
@@ -993,13 +1204,41 @@ class ObjectifGymnaseApp {
     feedbackRule.textContent = this.currentQuestion.perRule;
     feedbackBanner.classList.add('visible');
 
+    if (this.state.streak === 0) {
+      this.state.streak = 1;
+      localStorage.setItem('vaud_streak', '1');
+    }
+
+    const activeMod = this.getActiveModule();
+    if (activeMod?.id) {
+      const prevProg = Number(this.state.moduleProgress?.[activeMod.id] || 0);
+      const delta = isCorrect ? 20 : 5;
+      this.state.moduleProgress = {
+        ...this.state.moduleProgress,
+        [activeMod.id]: Math.min(100, prevProg + delta)
+      };
+      localStorage.setItem('vaud_module_progress', JSON.stringify(this.state.moduleProgress));
+    }
+
     localStorage.setItem('vaud_xp', String(this.state.xp));
     localStorage.setItem('vaud_answered', String(this.state.answeredCount));
     localStorage.setItem('vaud_correct', String(this.state.correctCount));
 
-    const meRow = this.state.leaderboard.find(r => r.isMe);
-    if (meRow) {
+    let meRow = this.state.leaderboard.find(r => r.isMe);
+    if (!meRow && this.state.xp > 0) {
+      meRow = {
+        name: this.state.currentUser
+          ? `${this.state.currentUser.pseudo} (${this.state.currentUser.etablissement || 'Vaud'})`
+          : 'Toi (Élève 11e VP)',
+        xp: this.state.xp,
+        streak: this.state.streak,
+        avatar: this.state.currentUser?.avatar || '⚡',
+        isMe: true
+      };
+      this.state.leaderboard.push(meRow);
+    } else if (meRow) {
       meRow.xp = this.state.xp;
+      meRow.streak = this.state.streak;
       if (this.state.currentUser) {
         meRow.name = `${this.state.currentUser.pseudo} (${this.state.currentUser.etablissement || 'Vaud'})`;
         meRow.avatar = this.state.currentUser.avatar || '⚡';
@@ -1007,9 +1246,11 @@ class ObjectifGymnaseApp {
     }
 
     this.syncStateToCloud();
+    this.renderPathBuilderCard();
     this.renderHeaderAndReadiness();
     this.renderQuestMap();
     this.renderStudioMetrics();
+    this.renderModuleGrid();
     this.renderDefisAndFamilyView();
   }
 
@@ -1378,16 +1619,33 @@ class ObjectifGymnaseApp {
   renderDefisAndFamilyView() {
     const listEl = document.getElementById('leaderboard-list');
     if (listEl) {
-      const sorted = [...this.state.leaderboard].sort((a, b) => b.xp - a.xp);
-      listEl.innerHTML = sorted.map((user, idx) => `
-        <div class="leader-row ${user.isMe ? 'me' : ''}">
-          <div class="leader-left">
-            <span class="rank-num">${idx + 1}</span>
-            <span>${user.avatar} ${user.name}</span>
+      const activeRows = this.state.leaderboard.filter(u => (u.xp || 0) > 0 || u.isMe);
+      if (activeRows.length === 0 || (activeRows.length === 1 && activeRows[0].isMe && (activeRows[0].xp || 0) === 0)) {
+        listEl.innerHTML = `
+          <div class="empty-state-box" id="leaderboard-empty-state">
+            <div class="empty-state-icon">🌱</div>
+            <h4>Classement vierge — Tout reste à construire !</h4>
+            <p>Aucun score factice : résous ton premier exercice (+25 XP) ou invite un camarade via un lien Duel 1v1 pour inaugurer le classement.</p>
+            <button type="button" class="primary-cta-btn compact-cta-btn" id="leaderboard-start-btn">
+              🎯 Gagner mes premiers XP →
+            </button>
           </div>
-          <span>${user.xp} XP</span>
-        </div>
-      `).join('');
+        `;
+        listEl.querySelector('#leaderboard-start-btn')?.addEventListener('click', () => {
+          this.switchView('entrainement');
+        });
+      } else {
+        const sorted = [...activeRows].sort((a, b) => b.xp - a.xp);
+        listEl.innerHTML = sorted.map((user, idx) => `
+          <div class="leader-row ${user.isMe ? 'me' : ''}">
+            <div class="leader-left">
+              <span class="rank-num">${idx + 1}</span>
+              <span>${user.avatar || '⚡'} ${user.name}</span>
+            </div>
+            <span>${user.xp} XP</span>
+          </div>
+        `).join('');
+      }
     }
 
     const cloudBadgeEl = document.getElementById('leaderboard-cloud-badge');
@@ -1405,9 +1663,10 @@ class ObjectifGymnaseApp {
     if (duelCodeEl) duelCodeEl.textContent = this.state.duelCode;
     if (duelXpEl) duelXpEl.textContent = `${this.state.xp} XP`;
 
-    const accuracy = this.state.answeredCount > 0
+    const hasAnswered = this.state.answeredCount > 0;
+    const accuracy = hasAnswered
       ? Math.round((this.state.correctCount / this.state.answeredCount) * 100)
-      : 100;
+      : 0;
 
     const famHeadingEl = document.getElementById('family-student-heading');
     const famChapEl = document.getElementById('family-active-chapter');
@@ -1422,7 +1681,7 @@ class ObjectifGymnaseApp {
     }
     if (famChapEl) famChapEl.textContent = `Chapitre actif : ${shortChapter}`;
     if (famXpEl) famXpEl.textContent = `${this.state.xp} XP`;
-    if (famAccEl) famAccEl.textContent = `${accuracy}%`;
+    if (famAccEl) famAccEl.textContent = hasAnswered ? `${accuracy}%` : '—';
     if (famStreakEl) famStreakEl.textContent = `🔥 ${this.state.streak} j.`;
   }
 
@@ -1525,6 +1784,361 @@ class ObjectifGymnaseApp {
       ? `${window.location.origin}${window.location.pathname}`
       : 'https://edutech-vaud-11vp.web.app/';
     return `${base}#devoir=${encoded}`;
+  }
+
+  /* ------------------------------------------------------------------------
+     VIEW 5: 🛡️ Admin Console (User Review, Reset/Purge & Invitations)
+     ------------------------------------------------------------------------ */
+  renderAdminView() {
+    const pillsEl = document.getElementById('admin-invite-chapters-pills');
+    if (pillsEl && !pillsEl.dataset.initialized) {
+      pillsEl.dataset.initialized = 'true';
+      const allModules = [
+        ...CURRICULUM_DATA.francais.modules.map(m => ({ ...m, subjLabel: 'FR' })),
+        ...CURRICULUM_DATA.allemand.modules.map(m => ({ ...m, subjLabel: 'DE' }))
+      ];
+      pillsEl.innerHTML = allModules.map((m, idx) => `
+        <label class="teacher-chap-pill">
+          <input type="checkbox" class="admin-invite-chap-cb" value="${m.id}" ${idx < 3 ? 'checked' : ''} />
+          <span>${m.icon} [${m.subjLabel}] ${m.title.split('(')[0].trim()}</span>
+        </label>
+      `).join('');
+    }
+
+    this.renderAdminKPIs();
+    this.renderAdminInvitesList();
+    this.renderAdminUsersTable();
+  }
+
+  renderAdminKPIs() {
+    const usersEl = document.getElementById('admin-kpi-users');
+    const invitesEl = document.getElementById('admin-kpi-invites');
+    const activeEl = document.getElementById('admin-kpi-active');
+    const cloudEl = document.getElementById('admin-kpi-cloud');
+
+    const users = this.state.adminUsers || [];
+    const invites = this.state.adminInvites || [];
+    const activeCount = users.filter(u => (u.xp || 0) > 0 || (u.answeredCount || 0) > 0).length;
+
+    if (usersEl) usersEl.textContent = String(users.length);
+    if (invitesEl) invitesEl.textContent = String(invites.length);
+    if (activeEl) activeEl.textContent = String(activeCount);
+    if (cloudEl) cloudEl.textContent = this.state.isCloudConnected ? '☁️ Firestore' : '💾 Local';
+  }
+
+  async refreshAdminConsole() {
+    if (this.firebaseService && this.state.isCloudConnected) {
+      const [cloudProfiles, cloudInvites] = await Promise.all([
+        this.firebaseService.fetchAllProfiles(100),
+        this.firebaseService.fetchCloudInvitations()
+      ]);
+      this.state.adminUsers = Array.isArray(cloudProfiles) ? cloudProfiles : [];
+      if (Array.isArray(cloudInvites) && cloudInvites.length > 0) {
+        const mergedInvites = [...cloudInvites];
+        for (const loc of this.state.adminInvites) {
+          if (!mergedInvites.some(ci => ci.code === loc.code)) {
+            mergedInvites.push(loc);
+          }
+        }
+        this.state.adminInvites = mergedInvites;
+        localStorage.setItem('vaud_admin_invites', JSON.stringify(mergedInvites));
+      }
+      this.state.leaderboard = this.state.adminUsers.map(p => ({
+        uid: p.uid,
+        name: `${p.pseudo} (${p.etablissement || 'Vaud'})`,
+        xp: p.xp || 0,
+        streak: p.streak || 0,
+        avatar: p.avatar || '⚡',
+        isMe: Boolean(this.state.currentUser && p.uid === this.state.currentUser.uid)
+      }));
+    } else if (this.state.currentUser) {
+      this.state.adminUsers = [{
+        uid: this.state.currentUser.uid || 'local-user',
+        pseudo: this.state.currentUser.pseudo,
+        etablissement: this.state.currentUser.etablissement || 'Canton de Vaud',
+        avatar: this.state.currentUser.avatar || '⚡',
+        role: this.state.currentUser.role || 'eleve',
+        xp: this.state.xp,
+        streak: this.state.streak,
+        answeredCount: this.state.answeredCount,
+        correctCount: this.state.correctCount,
+        focusedModules: this.state.focusedModules,
+        isMe: true
+      }];
+    }
+    this.renderAdminKPIs();
+    this.renderAdminInvitesList();
+    this.renderAdminUsersTable();
+    this.renderDefisAndFamilyView();
+  }
+
+  buildInvitationShareUrl(inviteObj) {
+    const encoded = this.encodeSharePayload({
+      code: inviteObj.code,
+      name: inviteObj.inviteeName,
+      email: inviteObj.inviteeEmail || '',
+      role: inviteObj.role || 'eleve',
+      school: inviteObj.etablissement || 'Canton de Vaud',
+      modules: inviteObj.focusedModules || ['subordonnees']
+    });
+    const base = (typeof window !== 'undefined' && window.location)
+      ? `${window.location.origin}${window.location.pathname}`
+      : 'https://edutech-vaud-11vp.web.app/';
+    return `${base}#invite=${encoded}`;
+  }
+
+  async handleCreateInvitation() {
+    const nameEl = document.getElementById('invite-name-input');
+    const emailEl = document.getElementById('invite-email-input');
+    const roleEl = document.getElementById('invite-role-select');
+    const schoolEl = document.getElementById('invite-school-select');
+    const previewEl = document.getElementById('admin-invite-link-preview');
+    const btn = document.getElementById('create-invite-btn');
+
+    const inviteeName = (nameEl?.value || '').trim() || 'Élève 11e VP';
+    const inviteeEmail = (emailEl?.value || '').trim();
+    const role = roleEl?.value || 'eleve';
+    const etablissement = schoolEl?.value || 'Collège de Béthusy (Lausanne)';
+    const checkedMods = Array.from(document.querySelectorAll('.admin-invite-chap-cb:checked')).map(cb => cb.value);
+    const focusedModules = checkedMods.length > 0 ? checkedMods : ['subordonnees', 'fonctions', 'orthographe'];
+    const code = `INV-VD-${Math.floor(10000 + Math.random() * 90000)}`;
+
+    const inviteObj = {
+      code,
+      inviteeName,
+      inviteeEmail,
+      role,
+      etablissement,
+      focusedModules,
+      status: 'pending'
+    };
+
+    const shareUrl = this.buildInvitationShareUrl(inviteObj);
+    if (previewEl) previewEl.textContent = shareUrl;
+    this.copyTextSafe(shareUrl);
+
+    if (this.firebaseService) {
+      await this.firebaseService.createCloudInvitation(inviteObj);
+    }
+
+    this.state.adminInvites = [
+      inviteObj,
+      ...this.state.adminInvites.filter(i => i.code !== code)
+    ];
+    localStorage.setItem('vaud_admin_invites', JSON.stringify(this.state.adminInvites));
+
+    if (nameEl) nameEl.value = '';
+    if (emailEl) emailEl.value = '';
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = '✅ Invitation créée & Lien copié !';
+      setTimeout(() => { btn.textContent = orig; }, 2500);
+    }
+
+    this.renderAdminKPIs();
+    this.renderAdminInvitesList();
+  }
+
+  renderAdminInvitesList() {
+    const container = document.getElementById('admin-invites-list');
+    if (!container) return;
+
+    const list = this.state.adminInvites || [];
+    if (list.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state-box">
+          <p>Aucune invitation générée pour le moment. Utilise le formulaire ci-dessus pour inviter un élève ou enseignant avec un parcours vierge (0%).</p>
+        </div>
+      `;
+      return;
+    }
+
+    const roleLabels = {
+      eleve: '🎓 Élève',
+      enseignant: '👩‍🏫 Enseignant',
+      admin: '🛡️ Admin'
+    };
+
+    container.innerHTML = `
+      <table class="admin-users-table">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Invité</th>
+            <th>Rôle &amp; École</th>
+            <th>Parcours ciblé</th>
+            <th>Statut</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${list.map(inv => {
+            const url = this.buildInvitationShareUrl(inv);
+            const statusBadge = inv.status === 'accepted'
+              ? '<span class="chapter-progress-badge">✅ Acceptée</span>'
+              : '<span class="chapter-zero-badge">⏳ En attente</span>';
+            return `
+              <tr data-invite-row="${inv.code}">
+                <td><code>${inv.code}</code></td>
+                <td><strong>${inv.inviteeName}</strong>${inv.inviteeEmail ? `<br/><small>${inv.inviteeEmail}</small>` : ''}</td>
+                <td><span class="role-badge">${roleLabels[inv.role] || '🎓 Élève'}</span><br/><small>${inv.etablissement || 'Vaud'}</small></td>
+                <td>${(inv.focusedModules || []).length} chapitre(s) • 0%</td>
+                <td>${statusBadge}</td>
+                <td>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <button type="button" class="secondary-btn compact-btn" data-copy-invite-url="${url}">📋 Copier lien</button>
+                    <button type="button" class="secondary-btn compact-btn" data-test-invite-url="${url}">🚀 Tester l’embarquement</button>
+                    <button type="button" class="secondary-btn compact-btn danger-outline-btn" data-delete-invite="${inv.code}">✕</button>
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+
+    container.querySelectorAll('[data-copy-invite-url]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const b = e.currentTarget;
+        this.copyTextSafe(b.dataset.copyInviteUrl);
+        const orig = b.textContent;
+        b.textContent = '✅ Copié';
+        setTimeout(() => { b.textContent = orig; }, 1800);
+      });
+    });
+
+    container.querySelectorAll('[data-test-invite-url]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const url = e.currentTarget.dataset.testInviteUrl;
+        const idx = url.indexOf('#invite=');
+        if (idx >= 0) {
+          window.location.hash = url.slice(idx);
+          this.handleHashRoute();
+          this.switchView('parcours');
+        }
+      });
+    });
+
+    container.querySelectorAll('[data-delete-invite]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const code = e.currentTarget.dataset.deleteInvite;
+        if (this.firebaseService) {
+          await this.firebaseService.deleteCloudInvitation(code);
+        }
+        this.state.adminInvites = this.state.adminInvites.filter(i => i.code !== code);
+        localStorage.setItem('vaud_admin_invites', JSON.stringify(this.state.adminInvites));
+        this.renderAdminKPIs();
+        this.renderAdminInvitesList();
+      });
+    });
+  }
+
+  renderAdminUsersTable() {
+    const tbody = document.getElementById('admin-users-tbody');
+    if (!tbody) return;
+
+    const query = this.state.adminSearchQuery || '';
+    const filtered = (this.state.adminUsers || []).filter(u => {
+      if (!query) return true;
+      const hay = `${u.pseudo} ${u.etablissement} ${u.role} ${u.uid}`.toLowerCase();
+      return hay.includes(query);
+    });
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6">
+            <div class="empty-state-box">
+              <div class="empty-state-icon">👥</div>
+              <h4>Aucun utilisateur enregistré</h4>
+              <p>La base est propre (aucune donnée factice). Invite un utilisateur ci-dessus ou crée un profil pour le voir apparaître ici.</p>
+            </div>
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    const roleLabels = {
+      eleve: '🎓 Élève',
+      enseignant: '👩‍🏫 Enseignant',
+      admin: '🛡️ Admin'
+    };
+
+    tbody.innerHTML = filtered.map(u => {
+      const acc = (u.answeredCount || 0) > 0
+        ? `${Math.round(((u.correctCount || 0) / u.answeredCount) * 100)}%`
+        : '—';
+      const chapCount = Array.isArray(u.focusedModules) ? u.focusedModules.length : 0;
+      return `
+        <tr data-admin-uid="${u.uid}">
+          <td>
+            <strong>${u.avatar || '⚡'} ${u.pseudo}</strong>
+            ${u.isMe ? '<span class="per-tag" style="margin-left:4px;">Moi</span>' : ''}
+            <br/><small style="color:var(--text-muted);">${String(u.uid).slice(0, 10)}…</small>
+          </td>
+          <td>${u.etablissement || 'Canton de Vaud'}</td>
+          <td><span class="role-badge">${roleLabels[u.role] || '🎓 Élève'}</span></td>
+          <td>
+            <strong>${u.xp || 0} XP</strong> • 🔥 ${u.streak || 0} j.
+            <br/><small>${u.answeredCount || 0} rép. (${acc})</small>
+          </td>
+          <td>${chapCount} chapitre(s) ciblé(s)</td>
+          <td>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button type="button" class="secondary-btn compact-btn" data-admin-reset-uid="${u.uid}" title="Remettre ce profil à 0 XP et 0%">
+                🧹 0 XP
+              </button>
+              <button type="button" class="secondary-btn compact-btn danger-outline-btn" data-admin-delete-uid="${u.uid}" title="Supprimer ce profil de Firestore">
+                🗑️ Supprimer
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    tbody.querySelectorAll('[data-admin-reset-uid]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const uid = e.currentTarget.dataset.adminResetUid;
+        const targetProfile = this.state.adminUsers.find(p => p.uid === uid);
+        if (this.firebaseService) {
+          await this.firebaseService.adminResetUserProfile(uid, targetProfile);
+        }
+        if (this.state.currentUser && this.state.currentUser.uid === uid) {
+          this.resetProgressCountersOnly();
+        }
+        await this.refreshAdminConsole();
+        this.renderAll();
+      });
+    });
+
+    tbody.querySelectorAll('[data-admin-delete-uid]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const uid = e.currentTarget.dataset.adminDeleteUid;
+        if (this.firebaseService) {
+          await this.firebaseService.adminDeleteUserProfile(uid);
+        }
+        this.state.adminUsers = this.state.adminUsers.filter(p => p.uid !== uid);
+        await this.refreshAdminConsole();
+      });
+    });
+  }
+
+  async purgeQATestProfiles() {
+    if (!this.firebaseService || !this.state.isCloudConnected) return 0;
+    const all = await this.firebaseService.fetchAllProfiles(100);
+    let deleted = 0;
+    for (const p of all) {
+      const name = String(p.pseudo || '');
+      if (name.startsWith('QA_') || name === 'Élève 11e VP' || (p.xp === 340 && p.answeredCount === 18)) {
+        const ok = await this.firebaseService.adminDeleteUserProfile(p.uid);
+        if (ok) deleted += 1;
+      }
+    }
+    await this.refreshAdminConsole();
+    return deleted;
   }
 
   /* ------------------------------------------------------------------------
@@ -1830,21 +2444,10 @@ class ObjectifGymnaseApp {
       });
     });
 
-    document.getElementById('simulate-friend-btn')?.addEventListener('click', (e) => {
-      this.state.xp += 30;
-      localStorage.setItem('vaud_xp', String(this.state.xp));
-      const meRow = this.state.leaderboard.find(r => r.isMe);
-      if (meRow) meRow.xp = this.state.xp;
-      this.syncStateToCloud();
-      this.renderHeaderAndReadiness();
-      this.renderDefisAndFamilyView();
-      e.currentTarget.textContent = '🏆 Victoire contre Léo (4/5 vs 3/5) → +30 XP !';
-    });
-
     document.getElementById('copy-family-msg-btn')?.addEventListener('click', (e) => {
       const accuracy = this.state.answeredCount > 0
         ? Math.round((this.state.correctCount / this.state.answeredCount) * 100)
-        : 100;
+        : 0;
       const modTitle = this.getActiveModule()?.title || 'Programme PER';
       const studentLabel = this.state.currentUser ? `${this.state.currentUser.pseudo} (${this.state.currentUser.etablissement})` : 'Élève 11e VP';
       const shareText = `🇨🇭 Bilan 11e VP — ${studentLabel} (Objectif Gymnase) :\n✅ ${this.state.xp} XP gagnés\n🎯 ${accuracy}% de réussite sur le programme PER (${modTitle})\n🔥 Série de ${this.state.streak} jours consécutifs !`;
@@ -1853,6 +2456,57 @@ class ObjectifGymnaseApp {
       const orig = btn.textContent;
       btn.textContent = '✅ Résumé copié pour WhatsApp !';
       setTimeout(() => { btn.textContent = orig; }, 2500);
+    });
+
+    // Path Builder Stepper Quick Actions
+    document.getElementById('path-step-auth-btn')?.addEventListener('click', () => {
+      this.openAuthModal();
+    });
+    document.getElementById('path-step-chapters-btn')?.addEventListener('click', () => {
+      document.getElementById('modules-overview-grid')?.scrollIntoView({ behavior: 'smooth' });
+    });
+    document.getElementById('path-step-start-btn')?.addEventListener('click', () => {
+      this.switchView('entrainement');
+    });
+
+    // View 5: 🛡️ Admin Console & Invitations Actions
+    document.getElementById('admin-refresh-btn')?.addEventListener('click', () => {
+      this.refreshAdminConsole();
+    });
+
+    document.getElementById('admin-reset-local-btn')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      this.resetProgressCountersOnly();
+      if (this.firebaseService && this.state.currentUser) {
+        await this.firebaseService.adminResetUserProfile(this.state.currentUser.uid, this.state.currentUser);
+      }
+      await this.refreshAdminConsole();
+      this.renderAll();
+      if (btn) {
+        const orig = btn.textContent;
+        btn.textContent = '✅ Session remise à 0 XP !';
+        setTimeout(() => { btn.textContent = orig; }, 2200);
+      }
+    });
+
+    document.getElementById('admin-purge-qa-btn')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      await this.purgeQATestProfiles();
+      if (btn) {
+        const orig = btn.textContent;
+        btn.textContent = '✅ Comptes test QA purgés !';
+        setTimeout(() => { btn.textContent = orig; }, 2200);
+      }
+    });
+
+    document.getElementById('admin-user-search')?.addEventListener('input', (e) => {
+      this.state.adminSearchQuery = e.currentTarget.value.trim().toLowerCase();
+      this.renderAdminUsersTable();
+    });
+
+    document.getElementById('admin-invite-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await this.handleCreateInvitation();
     });
 
     // View 4: Paramètres Interactions + Mode Enseignant (#devoir=...)
